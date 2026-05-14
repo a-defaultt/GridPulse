@@ -1,0 +1,13 @@
+[Unit]
+Description=GridPulse Daily Newsletter Generation
+After=network.target
+
+[Service]
+Type=oneshot
+User=ahmed
+WorkingDirectory=/home/ahmed/Desktop/GridPulse
+ExecStart=/usr/bin/python3 run.py --edition daily
+EnvironmentFile=/home/ahmed/Desktop/GridPulse/.env
+
+[Install]
+WantedBy=multi-user.target

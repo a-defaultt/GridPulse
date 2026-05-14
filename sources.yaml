@@ -1,0 +1,97 @@
+# sources.yaml — version controlled source definitions
+# Runtime state (last_fetched, failures) stored in DB only
+
+rss_sources:
+  - name: "The Hacker News"
+    url: "https://feeds.feedburner.com/TheHackersNews"
+    type: "rss"
+    enabled: true
+    priority: 1
+    topics: ["vulnerabilities", "apt", "tools"]
+
+  - name: "Krebs on Security"
+    url: "https://krebsonsecurity.com/feed/"
+    type: "rss"
+    enabled: true
+    priority: 1
+    topics: ["vulnerabilities", "apt"]
+
+  - name: "SANS Internet Storm Center"
+    url: "https://isc.sans.edu/rssfeed.xml"
+    type: "rss"
+    enabled: true
+    priority: 1
+    topics: ["vulnerabilities", "malware"]
+
+  - name: "SecurityWeek"
+    url: "https://www.securityweek.com/feed/"
+    type: "rss"
+    enabled: true
+    priority: 2
+    topics: ["vulnerabilities", "apt"]
+    note: "Paywalled — summaries truncated to ~1 sentence"
+
+  - name: "Bleeping Computer"
+    url: "https://www.bleepingcomputer.com/feed/"
+    type: "rss"
+    enabled: true
+    priority: 2
+    topics: ["ransomware", "malware"]
+
+  - name: "Wired Security"
+    url: "https://www.wired.com/feed/category/security/latest/rss"
+    type: "rss"
+    enabled: true
+    priority: 2
+    topics: ["general"]
+
+  - name: "Ars Technica"
+    url: "https://feeds.arstechnica.com/arstechnica/index"
+    type: "rss"
+    enabled: true
+    priority: 2
+    topics: ["vulnerabilities", "tools"]
+
+  - name: "Adobe Security"
+    url: "https://helpx.adobe.com/security/security-bulletin.rss"
+    type: "rss"
+    enabled: true
+    priority: 2
+    topics: ["vulnerabilities"]
+
+  - name: "Hacker News"
+    url: "https://hnrss.org/frontpage"
+    type: "rss"
+    enabled: true
+    priority: 3
+    topics: ["community", "general"]
+    min_score: 50
+
+# API sources use dict format (keyed by service name)
+api_sources:
+  nvd:
+    name: "nvd"
+    url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    type: "api"
+    enabled: true
+    priority: 1
+    topics: ["vulnerabilities"]
+    rate_limit_requests: 50
+    rate_limit_window_seconds: 30
+
+  cisa_kev:
+    name: "cisa_kev"
+    url: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    type: "api"
+    enabled: true
+    priority: 1
+    topics: ["vulnerabilities"]
+
+  otx:
+    name: "otx"
+    url: "https://otx.alienvault.com/api/v1"
+    type: "api"
+    enabled: false
+    priority: 2
+    topics: ["apt", "malware"]
+    requires_key: true

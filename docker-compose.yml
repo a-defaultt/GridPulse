@@ -1,0 +1,13 @@
+services:
+  gridpulse:
+    build: .
+    container_name: gridpulse
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./sources.yaml:/app/sources.yaml
+      - ./.env:/app/.env
+    restart: unless-stopped
+    environment:
+      - DATABASE_PATH=data/GridPulse.db
+      - SOURCES_YAML=sources.yaml
