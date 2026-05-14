@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block subtitle %}Daily Cybersecurity Intelligence - Edition #{{ edition_number }}{% endblock %}
+
+{% block content %}
+    {% for article in articles %}
+    <div class="article {{ 'featured' if article.is_featured else '' }}">
+        <div class="title">
+            <a href="{{ article.url }}">{{ article.title }}</a>
+        </div>
+        <div class="meta">
+            {% if article.cve_id %}<span class="cve">{{ article.cve_id }}</span>{% endif %}
+            {% if article.cvss_score %}<span class="cvss">CVSS: {{ article.cvss_score }}</span>{% endif %}
+            <span>Source: {{ article.source }}</span>
+        </div>
+        <div class="summary">
+            {{ article.llm_summary if article.llm_summary else article.summary }}
+        </div>
+    </div>
+    {% endfor %}
+{% endblock %}
