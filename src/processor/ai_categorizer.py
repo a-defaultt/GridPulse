@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict
 
 from openai import OpenAI
-from src.config import NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, CATEGORIZER_MODEL
+from src.config import NVIDIA_CATEGORIZER_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, CATEGORIZER_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,8 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
     Falls back gracefully: on any failure the articles are returned with
     their existing keyword-based categories intact.
     """
-    if not NVIDIA_KEYS:
+    primary_key = NVIDIA_CATEGORIZER_KEY or (NVIDIA_KEYS[0] if NVIDIA_KEYS else None)
+    if not primary_key:
         logger.warning("No API keys available. Skipping AI categorization.")
         return articles
 
@@ -40,9 +41,11 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
 
     batch_size = 15  # Keep batches small for the 8B model
     current_key_index = 0
+    # Build a local key list: dedicated key first, then the rotation pool
+    local_keys = list(dict.fromkeys([primary_key] + NVIDIA_KEYS))
     client = OpenAI(
         base_url=LLM_BASE_URL,
-        api_key=NVIDIA_KEYS[current_key_index],
+        api_key=local_keys[current_key_index],
         timeout=NVIDIA_TIMEOUT,
     )
 
@@ -70,7 +73,7 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
         success = False
         attempts_with_keys = 0
 
-        while not success and attempts_with_keys < len(NVIDIA_KEYS):
+        while not success and attempts_with_keys < len(local_keys):
             try:
                 response = client.chat.completions.create(
                     model=CATEGORIZER_MODEL,
@@ -133,10 +136,10 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
                         f"Rate limit on key {current_key_index + 1}. "
                         f"Rotating to next key."
                     )
-                    current_key_index = (current_key_index + 1) % len(NVIDIA_KEYS)
+                    current_key_index = (current_key_index + 1) % len(local_keys)
                     client = OpenAI(
                         base_url=LLM_BASE_URL,
-                        api_key=NVIDIA_KEYS[current_key_index],
+                        api_key=local_keys[current_key_index],
                         timeout=NVIDIA_TIMEOUT,
                     )
                     attempts_with_keys += 1

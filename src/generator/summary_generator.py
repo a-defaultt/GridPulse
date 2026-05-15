@@ -3,7 +3,7 @@ import logging
 import json
 from typing import List, Dict
 from openai import OpenAI
-from src.config import LLM_BASE_URL, NVIDIA_KEYS, LLM_MODEL, NVIDIA_TIMEOUT
+from src.config import LLM_BASE_URL, NVIDIA_SUMMARIZER_KEY, NVIDIA_KEYS, LLM_MODEL, NVIDIA_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +12,14 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
     Generate summaries for articles in batches of 10 using LLM.
     V5 Enhancement: Uses OpenAI client and JSON batch prompting.
     V5.1 Enhancement: Multi-key rotation for NVIDIA free tier limits.
+    V5.2 Enhancement: Uses dedicated NVIDIA_SUMMARIZER_KEY.
     """
-    if not NVIDIA_KEYS:
+    # Build local key list: dedicated summarizer key first, then rotation pool
+    local_keys = list(dict.fromkeys(
+        [NVIDIA_SUMMARIZER_KEY] + NVIDIA_KEYS
+    )) if NVIDIA_SUMMARIZER_KEY else NVIDIA_KEYS
+
+    if not local_keys:
         logger.warning("No LLM API keys found. Skipping LLM summaries.")
         return articles
 
@@ -39,8 +45,8 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
         success = False
         attempts_with_keys = 0
         
-        while not success and attempts_with_keys < len(NVIDIA_KEYS):
-            api_key = NVIDIA_KEYS[current_key_index]
+        while not success and attempts_with_keys < len(local_keys):
+            api_key = local_keys[current_key_index]
             client = OpenAI(base_url=LLM_BASE_URL, api_key=api_key, timeout=NVIDIA_TIMEOUT)
             
             try:
@@ -78,7 +84,7 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
                 # Check for rate limit (429)
                 if "429" in str(e) or "rate limit" in str(e).lower():
                     logger.warning(f"Rate limit hit for key {current_key_index + 1}. Rotating to next key.")
-                    current_key_index = (current_key_index + 1) % len(NVIDIA_KEYS)
+                    current_key_index = (current_key_index + 1) % len(local_keys)
                     attempts_with_keys += 1
                 else:
                     logger.error(f"LLM batch summary generation failed: {e}")
