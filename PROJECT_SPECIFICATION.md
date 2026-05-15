@@ -73,6 +73,30 @@ GridPulse follows a strict **"Heuristic First, AI Second"** pattern. AI never re
 *   **Batching:** Sends articles in batches of 10-15 to the LLM to minimize latency and bypass rate limits.
 *   **Summarization:** LLM generates 2-3 sentence summaries focusing on "Impact" and "Action Required."
 
+### 3.4 NVIDIA NIM Model Assignments & Selection Rationale
+The pipeline uses specific NVIDIA NIM models for each task, assigned via dedicated API keys to maximize the free tier rate limits.
+
+#### 1. Summarization (`NVIDIA_SUMMARIZER_KEY`)
+*   **Endpoint:** `/v1/chat/completions`
+*   **🥇 Best (Default):** `nvidia/llama-3.3-nemotron-super-49b-v1` (NVIDIA's flagship; best JSON adherence and cybersecurity reasoning).
+*   **🥈 Faster:** `meta/llama-3.1-70b-instruct` (128K context, native JSON mode).
+*   **🥉 Budget:** `meta/llama-3.1-8b-instruct` (Fastest, good fallback for tight rate limits).
+
+#### 2. Semantic Deduplication (`NVIDIA_EMBEDDING_KEY`)
+*   **Endpoint:** `/v1/embeddings`
+*   **🥇 Best (Default):** `nvidia/llama-nemotron-embed-1b-v2` (Multilingual, long-doc, optimized for passage similarity).
+*   **🥈 Alternative:** `nvidia/nv-embedqa-e5-v5` (Battle-tested in NVIDIA's CVE Blueprints; highly reliable).
+
+#### 3. AI Categorization (`NVIDIA_CATEGORIZER_KEY`)
+*   **Endpoint:** `/v1/chat/completions`
+*   **🥇 Best (Default):** `meta/llama-3.1-8b-instruct` (Fast, cheap, highly deterministic at low temperatures for structured JSON).
+*   **🥈 More Accurate:** `nvidia/llama-3.3-nemotron-super-49b-v1` (Catches subtle topics like `regulatory` or `insider-threat`, but higher latency).
+
+#### 4. Neural Reranking (`NVIDIA_RERANKER_KEY`)
+*   **Endpoint:** `/v1/ranking`
+*   **🥇 Best (Default):** `nvidia/llama-nemotron-rerank-1b-v2` (GPU-accelerated, purpose-built for passage reranking).
+*   **🥈 Alternative:** `nvidia/llama-3.2-nv-rerankqa-1b-v2` (Better multilingual and long-context support for non-English sources).
+
 ## 4. Database Architecture
 *   **Engine:** SQLite 3.
 *   **Concurrency:** **WAL (Write-Ahead Logging)** mode is enabled globally. This allows the aggregator to write new findings while the generator reads data for a newsletter simultaneously without `database is locked` errors.
