@@ -25,7 +25,8 @@ def generate_weekly_newsletter(articles: list[dict], edition_number: int) -> dic
         html_content = template.render(
             articles=articles,
             date_display=date_display,
-            edition_number=edition_number
+            edition_number=edition_number,
+            edition_title="Weekly"
         )
         
         text_content = f"GridPulse Weekly Newsletter - Edition {edition_number}\n"
@@ -37,7 +38,8 @@ def generate_weekly_newsletter(articles: list[dict], edition_number: int) -> dic
             'subject': f"GridPulse Weekly Newsletter #{edition_number} - {now.strftime('%Y-%m-%d')}",
             'content_html': html_content,
             'content_text': text_content,
-            'article_count': len(articles)
+            'article_count': len(articles),
+            'edition_number': edition_number
         }
     except Exception as e:
         logger.error(f"Error generating weekly newsletter: {e}")

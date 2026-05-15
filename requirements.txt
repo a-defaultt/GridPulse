@@ -24,6 +24,7 @@ schedule>=1.2.1
 
 # LLM Standard Client (V5 enhancement for batching via NVIDIA/Groq)
 openai>=1.14.0
+numpy>=1.26.0
 
 # Charts (uncomment if using chart_generator)
 # matplotlib>=3.9.0

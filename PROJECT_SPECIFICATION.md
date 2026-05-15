@@ -22,30 +22,35 @@ GridPulse/
 │   ├── database/           # Database Handlers
 │   │   └── db_handler.py       # Connection management (WAL mode enabled)
 │   ├── delivery/           # Newsletter Distribution
-│   │   ├── email_sender.py     # Looped SMTP delivery for privacy
+│   │   ├── email_sender.py     # Looped SMTP delivery with attachment support
 │   │   └── scheduler.py        # Internal Python-based job scheduler
 │   ├── generator/          # Content Composition
+│   │   ├── __init__.py         # Unified generator orchestrator
 │   │   ├── content_selector.py # Scoring-based article selection
 │   │   ├── daily_generator.py  # Daily Jinja2 rendering logic
+│   │   ├── weekly_generator.py # Weekly Jinja2 rendering logic
+│   │   ├── monthly_generator.py# Monthly Jinja2 rendering logic
 │   │   └── summary_generator.py # Batch LLM summarization with key rotation
 │   ├── processor/          # Multi-Stage Intelligence Pipeline
 │   │   ├── categorizer.py      # Heuristic keyword-based tagging
 │   │   ├── ai_categorizer.py   # LLM-powered multi-label classification
 │   │   ├── deduplicator.py     # Exact URL/Title deduplication
-│   │   ├── ai_deduplicator.py  # Semantic embedding-based deduplication
+│   │   ├── ai_deduplicator.py  # Semantic embedding-based dedup (NumPy optimized)
 │   │   ├── ranker.py           # Heuristic CVSS/Source relevance scoring
 │   │   ├── ai_ranker.py        # Neural passage reranking & score blending
+│   │   ├── ioc_extractor.py    # Regex-based Indicator of Compromise extraction
 │   │   └── freshness.py        # 7-day rolling window temporal filter
 │   ├── utils/              # Shared Utilities
+│   │   ├── csv_utils.py        # IOC CSV generation helpers
 │   │   └── datetime_utils.py   # UTC-aware ISO 8601 serialization
 │   └── main.py             # Pipeline Orchestrator (Fetch -> Process -> Gen -> Deliver)
 ├── systemd/                # Linux systemd unit templates
 ├── templates/              # Jinja2 HTML/Text templates
-├── tests/                  # Pytest suite
+├── tests/                  # Pytest suite (Unit & Connectivity)
 ├── Dockerfile              # Production container definition
 ├── docker-compose.yml      # Orchestration (Volumes, Env, Networking)
 ├── docker-entrypoint.sh    # Container startup and initialization script
-├── requirements.txt        # Python dependency manifest
+├── requirements.txt        # Python dependency manifest (NumPy, OpenAI, etc.)
 ├── run.py                  # CLI Entry point with log rotation setup
 └── sources.yaml            # Version-controlled ingestion definitions
 ```
@@ -61,17 +66,20 @@ The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicate
 GridPulse follows a strict **"Heuristic First, AI Second"** pattern. AI never replaces the baseline; it enriches it.
 1.  **Deduplication:**
     *   *Heuristic:* Removes identical URLs or normalized titles.
-    *   *AI:* Uses NVIDIA embeddings to remove semantically similar articles (e.g., two different outlets reporting the same vulnerability).
+    *   *AI (V5.4):* Uses NVIDIA embeddings to remove semantically similar articles. Optimized with **NumPy** for vector matrix operations and capped at the top **500 articles** to ensure high-performance execution.
 2.  **Categorization:**
     *   *Heuristic:* Fast regex-based tagging (vulnerability, malware).
     *   *AI:* Uses LLM to identify context (state-sponsored, zero-day) that keywords miss.
 3.  **Ranking:**
     *   *Heuristic:* Scores based on CVSS, KEV status, and Source Priority.
     *   *AI:* Uses a Neural Reranker to score relevance against a "SOC-focused" query, blending with the heuristic score (40/60 split).
+4.  **IOC Extraction (V5.4):**
+    *   Automatically extracts **IP addresses, Domains, and File Hashes (MD5, SHA1, SHA256)** from all processed articles using optimized regex patterns.
 
 ### 3.3 Generation & Summarization
 *   **Batching:** Sends articles in batches of 10-15 to the LLM to minimize latency and bypass rate limits.
 *   **Summarization:** LLM generates 2-3 sentence summaries focusing on "Impact" and "Action Required."
+*   **Dynamic Metadata:** Templates display `published_date` for each article and utilize dynamic `edition_title` headers (Daily/Weekly/Monthly).
 
 ### 3.4 NVIDIA NIM Model Assignments & Selection Rationale
 The pipeline uses specific NVIDIA NIM models for each task, assigned via dedicated API keys to maximize the free tier rate limits.
@@ -79,23 +87,18 @@ The pipeline uses specific NVIDIA NIM models for each task, assigned via dedicat
 #### 1. Summarization (`NVIDIA_SUMMARIZER_KEY`)
 *   **Endpoint:** `/v1/chat/completions`
 *   **🥇 Best (Default):** `nvidia/llama-3.3-nemotron-super-49b-v1` (NVIDIA's flagship; best JSON adherence and cybersecurity reasoning).
-*   **🥈 Faster:** `meta/llama-3.1-70b-instruct` (128K context, native JSON mode).
-*   **🥉 Budget:** `meta/llama-3.1-8b-instruct` (Fastest, good fallback for tight rate limits).
 
 #### 2. Semantic Deduplication (`NVIDIA_EMBEDDING_KEY`)
 *   **Endpoint:** `/v1/embeddings`
 *   **🥇 Best (Default):** `nvidia/llama-nemotron-embed-1b-v2` (Multilingual, long-doc, optimized for passage similarity).
-*   **🥈 Alternative:** `nvidia/nv-embedqa-e5-v5` (Battle-tested in NVIDIA's CVE Blueprints; highly reliable).
 
 #### 3. AI Categorization (`NVIDIA_CATEGORIZER_KEY`)
 *   **Endpoint:** `/v1/chat/completions`
-*   **🥇 Best (Default):** `meta/llama-3.1-8b-instruct` (Fast, cheap, highly deterministic at low temperatures for structured JSON).
-*   **🥈 More Accurate:** `nvidia/llama-3.3-nemotron-super-49b-v1` (Catches subtle topics like `regulatory` or `insider-threat`, but higher latency).
+*   **🥇 Best (Default):** `meta/llama-3.1-8b-instruct` (Fast, cheap, highly deterministic for multi-label classification).
 
 #### 4. Neural Reranking (`NVIDIA_RERANKER_KEY`)
-*   **Endpoint:** `/v1/ranking`
+*   **Endpoint:** `/retrieval/nvidia/{model}/reranking` (Custom model-specific path)
 *   **🥇 Best (Default):** `nvidia/llama-nemotron-rerank-1b-v2` (GPU-accelerated, purpose-built for passage reranking).
-*   **🥈 Alternative:** `nvidia/llama-3.2-nv-rerankqa-1b-v2` (Better multilingual and long-context support for non-English sources).
 
 ## 4. Database Architecture
 *   **Engine:** SQLite 3.
@@ -113,8 +116,9 @@ To maximize the NVIDIA NIM free tier, the system maps keys by task:
 
 If a feature-specific key hits a **429 Rate Limit**, the system automatically rotates through a shared `NVIDIA_KEYS` pool.
 
-### 5.2 Delivery Safety
-*   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list. This prevents recipients from seeing each other's addresses and avoids being flagged by bulk spam filters.
+### 5.2 Delivery & Attachments (V5.4)
+*   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
+*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing all extracted Indicators of Compromise found in that edition's articles, providing actionable threat-hunting data.
 
 ## 6. Operational Guidelines
 
@@ -133,4 +137,4 @@ docker-compose up -d --build
 ## 7. Development Standards
 1.  **UTC Everywhere:** Never use `datetime.now()` without `timezone.utc`.
 2.  **Graceful Fallback:** AI modules must catch all exceptions and return the original article list so the pipeline continues.
-3.  **Atomic Edits:** Always update `schema.sql` and `PROJECT_SPECIFICATION.md` when changing core architecture.
+3.  **Atomic Edits:** ALWAYS update `schema.sql` and `PROJECT_SPECIFICATION.md` when changing core architecture or adding major features.
