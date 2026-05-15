@@ -14,21 +14,14 @@ def fetch_nvd_cves(days: int = 1) -> List[Dict]:
     """
     base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
     
-    # Calculate date range
-    # NVD API expects ISO 8601
-    # Example: 2021-08-04T00:00:00.000
-    # Actually it's pubModStartDate and pubModEndDate
-    
     logger.info(f"Fetching recent CVEs from NVD (last {days} days)")
     
-    params = {}
+    headers = {}
     if NVD_API_KEY:
-        params['apiKey'] = NVD_API_KEY
+        headers['apiKey'] = NVD_API_KEY
     
     try:
-        # Simplification: just fetch latest for now
-        # In a real impl, we'd use date filters
-        response = requests.get(base_url, params=params, timeout=20)
+        response = requests.get(base_url, headers=headers, timeout=20)
         response.raise_for_status()
         data = response.json()
         
