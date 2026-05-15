@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict
 
 import requests as http_requests  # Alias to avoid clash with any local names
-from src.config import NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, RERANKER_MODEL
+from src.config import NVIDIA_RERANKER_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, RERANKER_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ def neural_rerank(articles: List[Dict]) -> List[Dict]:
     if not articles:
         return articles
 
-    if not NVIDIA_KEYS:
+    reranker_key = NVIDIA_RERANKER_KEY or (NVIDIA_KEYS[0] if NVIDIA_KEYS else None)
+    if not reranker_key:
         logger.warning("No API keys available. Skipping neural reranking.")
         return articles
 
@@ -58,7 +59,7 @@ def neural_rerank(articles: List[Dict]) -> List[Dict]:
     # The reranker uses a dedicated /ranking endpoint (not OpenAI-compatible)
     api_url = f"{LLM_BASE_URL.rstrip('/')}/ranking"
     headers = {
-        "Authorization": f"Bearer {NVIDIA_KEYS[0]}",
+        "Authorization": f"Bearer {reranker_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }

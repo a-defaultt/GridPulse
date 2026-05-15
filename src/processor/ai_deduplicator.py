@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Optional
 
 from openai import OpenAI
-from src.config import NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, EMBEDDING_MODEL
+from src.config import NVIDIA_EMBEDDING_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,10 @@ SIMILARITY_THRESHOLD = 0.85
 
 def _get_embedding_client() -> Optional[OpenAI]:
     """Return an OpenAI client pointed at the NVIDIA NIM embedding endpoint."""
-    if not NVIDIA_KEYS:
+    key = NVIDIA_EMBEDDING_KEY or (NVIDIA_KEYS[0] if NVIDIA_KEYS else None)
+    if not key:
         return None
-    return OpenAI(base_url=LLM_BASE_URL, api_key=NVIDIA_KEYS[0], timeout=NVIDIA_TIMEOUT)
+    return OpenAI(base_url=LLM_BASE_URL, api_key=key, timeout=NVIDIA_TIMEOUT)
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:

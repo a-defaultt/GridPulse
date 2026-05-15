@@ -32,14 +32,23 @@ NVD_API_KEY = os.getenv("NVD_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "meta/llama3-70b-instruct")
 
-# Multi-key rotation support
-NVIDIA_KEYS = [
-    os.getenv("NVIDIA_PRIMARY_KEY"),
-    os.getenv("NVIDIA_FALLBACK_KEY1"),
-    os.getenv("NVIDIA_FALLBACK_KEY2"),
-    os.getenv("LLM_API_KEY") # Fallback to single key if set
-]
-NVIDIA_KEYS = [k for k in NVIDIA_KEYS if k] # Filter out empty
+# Per-feature NVIDIA API keys (named by purpose)
+NVIDIA_SUMMARIZER_KEY = os.getenv("NVIDIA_SUMMARIZER_KEY")
+NVIDIA_EMBEDDING_KEY = os.getenv("NVIDIA_EMBEDDING_KEY")
+NVIDIA_CATEGORIZER_KEY = os.getenv("NVIDIA_CATEGORIZER_KEY")
+NVIDIA_RERANKER_KEY = os.getenv("NVIDIA_RERANKER_KEY")
+
+# Rotation pool: all unique keys for rate-limit fallback (order preserved)
+NVIDIA_KEYS = list(dict.fromkeys(
+    k for k in [
+        NVIDIA_SUMMARIZER_KEY,
+        NVIDIA_EMBEDDING_KEY,
+        NVIDIA_CATEGORIZER_KEY,
+        NVIDIA_RERANKER_KEY,
+        os.getenv("LLM_API_KEY"),  # Legacy fallback
+    ]
+    if k
+))
 NVIDIA_TIMEOUT = int(os.getenv("NVIDIA_TIMEOUT_SECONDS", 120))
 
 # V5.2 AI Enhancement Models
