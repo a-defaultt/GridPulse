@@ -1,0 +1,112 @@
+# GridPulse V5: Production-Ready Cyber Intelligence Aggregator
+
+## 1. Executive Summary
+GridPulse is a self-hosted platform designed to solve the "noise" problem in cybersecurity intelligence. It aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated newsletters.
+
+## 2. File System Hierarchy
+```text
+GridPulse/
+├── data/                   # Persistent SQLite database storage
+├── database/
+│   └── schema.sql          # Final V5 schema with migration tracking
+├── logs/                   # Rotating application logs (gridpulse.log)
+├── src/                    # Primary Source Code
+│   ├── aggregator/         # Data Ingestion Layer
+│   │   ├── rss_fetcher.py      # Universal RSS parser with score filtering
+│   │   ├── nvd_client.py       # NVD 2.0 API integration
+│   │   ├── cisa_kev.py         # CISA Known Exploited Vulns integration
+│   │   └── vendor_advisories.py # Legacy scrapers (e.g., Adobe fallback)
+│   ├── config/             # Configuration & Source Management
+│   │   ├── __init__.py         # Environment loading & Per-feature key setup
+│   │   └── source_manager.py   # Hybrid YAML/DB source synchronization
+│   ├── database/           # Database Handlers
+│   │   └── db_handler.py       # Connection management (WAL mode enabled)
+│   ├── delivery/           # Newsletter Distribution
+│   │   ├── email_sender.py     # Looped SMTP delivery for privacy
+│   │   └── scheduler.py        # Internal Python-based job scheduler
+│   ├── generator/          # Content Composition
+│   │   ├── content_selector.py # Scoring-based article selection
+│   │   ├── daily_generator.py  # Daily Jinja2 rendering logic
+│   │   └── summary_generator.py # Batch LLM summarization with key rotation
+│   ├── processor/          # Multi-Stage Intelligence Pipeline
+│   │   ├── categorizer.py      # Heuristic keyword-based tagging
+│   │   ├── ai_categorizer.py   # LLM-powered multi-label classification
+│   │   ├── deduplicator.py     # Exact URL/Title deduplication
+│   │   ├── ai_deduplicator.py  # Semantic embedding-based deduplication
+│   │   ├── ranker.py           # Heuristic CVSS/Source relevance scoring
+│   │   ├── ai_ranker.py        # Neural passage reranking & score blending
+│   │   └── freshness.py        # 7-day rolling window temporal filter
+│   ├── utils/              # Shared Utilities
+│   │   └── datetime_utils.py   # UTC-aware ISO 8601 serialization
+│   └── main.py             # Pipeline Orchestrator (Fetch -> Process -> Gen -> Deliver)
+├── systemd/                # Linux systemd unit templates
+├── templates/              # Jinja2 HTML/Text templates
+├── tests/                  # Pytest suite
+├── Dockerfile              # Production container definition
+├── docker-compose.yml      # Orchestration (Volumes, Env, Networking)
+├── docker-entrypoint.sh    # Container startup and initialization script
+├── requirements.txt        # Python dependency manifest
+├── run.py                  # CLI Entry point with log rotation setup
+└── sources.yaml            # Version-controlled ingestion definitions
+```
+
+## 3. The Multi-Stage Pipeline (Fetch-Process-Gen-Deliver)
+
+### 3.1 Aggregation
+The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicated clients. RSS sources are handled by a universal fetcher.
+*   **Adobe Logic:** Automatically detects if a vendor uses RSS or requires legacy scraping.
+*   **Score Filtering:** Ingests `min_score` for community feeds (e.g., Hacker News) to ensure quality.
+
+### 3.2 Intelligence Processing ("The Enrichment Pattern")
+GridPulse follows a strict **"Heuristic First, AI Second"** pattern. AI never replaces the baseline; it enriches it.
+1.  **Deduplication:**
+    *   *Heuristic:* Removes identical URLs or normalized titles.
+    *   *AI:* Uses NVIDIA embeddings to remove semantically similar articles (e.g., two different outlets reporting the same vulnerability).
+2.  **Categorization:**
+    *   *Heuristic:* Fast regex-based tagging (vulnerability, malware).
+    *   *AI:* Uses LLM to identify context (state-sponsored, zero-day) that keywords miss.
+3.  **Ranking:**
+    *   *Heuristic:* Scores based on CVSS, KEV status, and Source Priority.
+    *   *AI:* Uses a Neural Reranker to score relevance against a "SOC-focused" query, blending with the heuristic score (40/60 split).
+
+### 3.3 Generation & Summarization
+*   **Batching:** Sends articles in batches of 10-15 to the LLM to minimize latency and bypass rate limits.
+*   **Summarization:** LLM generates 2-3 sentence summaries focusing on "Impact" and "Action Required."
+
+## 4. Database Architecture
+*   **Engine:** SQLite 3.
+*   **Concurrency:** **WAL (Write-Ahead Logging)** mode is enabled globally. This allows the aggregator to write new findings while the generator reads data for a newsletter simultaneously without `database is locked` errors.
+*   **Consistency:** All dates are stored as **ISO 8601 UTC strings**. The `datetime_utils.py` module is the strict gateway for all DB date operations.
+
+## 5. Advanced Configuration & Resiliency
+
+### 5.1 Per-Feature API Key Management
+To maximize the NVIDIA NIM free tier, the system maps keys by task:
+*   `NVIDIA_SUMMARIZER_KEY`
+*   `NVIDIA_EMBEDDING_KEY`
+*   `NVIDIA_CATEGORIZER_KEY`
+*   `NVIDIA_RERANKER_KEY`
+
+If a feature-specific key hits a **429 Rate Limit**, the system automatically rotates through a shared `NVIDIA_KEYS` pool.
+
+### 5.2 Delivery Safety
+*   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list. This prevents recipients from seeing each other's addresses and avoids being flagged by bulk spam filters.
+
+## 6. Operational Guidelines
+
+### Manual Execution
+```bash
+./run.py --edition daily --dry-run   # Test without sending
+./run.py --edition weekly            # Full production run
+```
+
+### Docker Deployment
+The container runs an internal `scheduler.py` loop. It persists the database to the `data/` volume and logs to the `logs/` volume.
+```bash
+docker-compose up -d --build
+```
+
+## 7. Development Standards
+1.  **UTC Everywhere:** Never use `datetime.now()` without `timezone.utc`.
+2.  **Graceful Fallback:** AI modules must catch all exceptions and return the original article list so the pipeline continues.
+3.  **Atomic Edits:** Always update `schema.sql` and `PROJECT_SPECIFICATION.md` when changing core architecture.
