@@ -3,6 +3,7 @@ from .content_selector import select_newsletter_content
 from .summary_generator import generate_summaries_batch
 from .daily_generator import generate_daily_newsletter
 from .weekly_generator import generate_weekly_newsletter
+from .monthly_generator import generate_monthly_newsletter
 
 def generate_newsletter_all(articles: list[dict], edition: str, db_path: str) -> dict:
     """
@@ -28,11 +29,7 @@ def generate_newsletter_all(articles: list[dict], edition: str, db_path: str) ->
         return generate_daily_newsletter(selected, edition_number)
     elif edition == 'weekly':
         return generate_weekly_newsletter(selected, edition_number)
+    elif edition == 'monthly':
+        return generate_monthly_newsletter(selected, edition_number)
     else:
-        # Placeholder for monthly
-        return {
-            'subject': f"GridPulse {edition.capitalize()} Newsletter",
-            'content_html': "<h1>Coming Soon</h1>",
-            'content_text': "Coming soon.",
-            'article_count': len(selected)
-        }
+        raise ValueError(f"Unknown edition type: {edition}")

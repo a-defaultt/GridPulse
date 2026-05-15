@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block subtitle %}Daily Cybersecurity Intelligence - Edition #{{ edition_number }}{% endblock %}
+{% block subtitle %}{{ edition_title }} Cybersecurity Intelligence - Edition #{{ edition_number }}{% endblock %}
 
 {% block content %}
     {% for article in articles %}
@@ -12,6 +12,7 @@
             {% if article.cve_id %}<span class="cve">{{ article.cve_id }}</span>{% endif %}
             {% if article.cvss_score %}<span class="cvss">CVSS: {{ article.cvss_score }}</span>{% endif %}
             <span>Source: {{ article.source }}</span>
+            {% if article.published_date %} | <span>Published: {{ article.published_date }}</span>{% endif %}
         </div>
         <div class="summary">
             {{ article.llm_summary if article.llm_summary else article.summary }}

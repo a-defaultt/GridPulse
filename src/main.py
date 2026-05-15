@@ -19,6 +19,9 @@ from src.aggregator import fetch_all_sources
 from src.processor import process_all
 from src.generator import generate_newsletter_all
 from src.delivery.email_sender import send_individual_emails
+from src.processor.ioc_extractor import process_article_iocs, get_all_unique_iocs
+from src.utils.csv_utils import generate_ioc_csv
+from src.utils.datetime_utils import dt_to_str, utc_now
 import time
 
 from src.database.db_handler import init_db
@@ -50,6 +53,14 @@ def run_pipeline(edition: str, dry_run: bool = False):
     # --- Stage 3: Generate --- (raises on failure → aborts pipeline)
     newsletter = generate_newsletter_all(processed, edition, db_path)
 
+    # --- Stage 3.5: Extract IOCs for CSV attachment ---
+    # We include all unique IOCs from processed articles.
+    processed_with_iocs = process_article_iocs(processed)
+    iocs = get_all_unique_iocs(processed_with_iocs)
+        
+    ioc_csv_content = generate_ioc_csv(iocs)
+    ioc_filename = f"gridpulse_iocs_{edition}_{utc_now().strftime('%Y%m%d')}.csv"
+
     # --- Stage 4: Deliver ---
     if not dry_run:
         # Retry logic for delivery
@@ -57,18 +68,17 @@ def run_pipeline(edition: str, dry_run: bool = False):
         backoff = 60
         for attempt in range(max_attempts):
             try:
-                send_individual_emails(newsletter)
+                send_individual_emails(newsletter, attachment_content=ioc_csv_content, attachment_filename=ioc_filename)
                 # Success! Record in DB
                 import sqlite3
-                from src.utils.datetime_utils import dt_to_str, utc_now
                 with sqlite3.connect(db_path) as conn:
                     conn.execute('PRAGMA journal_mode=WAL;')
                     conn.execute('''
-                        INSERT INTO newsletters (edition_type, edition_number, subject, article_count, sent_date, status)
+                        INSERT OR REPLACE INTO newsletters (edition_type, edition_number, subject, article_count, sent_date, status)
                         VALUES (?, ?, ?, ?, ?, ?)
                     ''', (
                         edition, 
-                        newsletter.get('edition_number', 1), # Need to ensure this is in the newsletter dict or passed
+                        newsletter.get('edition_number', 1),
                         newsletter['subject'],
                         newsletter['article_count'],
                         dt_to_str(utc_now()),
@@ -85,3 +95,5 @@ def run_pipeline(edition: str, dry_run: bool = False):
     else:
         logger.info("Dry run — newsletter not sent. Content logged at DEBUG level.")
         logger.debug(newsletter.get('content_text', ''))
+        if ioc_csv_content:
+            logger.debug(f"Generated IOC CSV ({len(iocs)} items): {ioc_filename}")
