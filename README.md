@@ -1,17 +1,19 @@
-# GridPulse V5.2
+# GridPulse V5.4
 
-GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, and delivers curated daily/weekly/monthly briefings.
+GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, extracts Indicators of Compromise (IOCs), and delivers curated daily/weekly/monthly briefings with actionable CSV attachments.
 
 ## Features
 
 - **Multi-source Aggregation:** RSS feeds, NVD API, CISA KEV, and custom vendor scrapers (e.g., Adobe).
 - **Production-Ready Core:** SQLite with WAL mode for concurrency, rotating logs, and robust error handling.
-- **AI-Powered Pipeline (V5.2):**
+- **AI-Powered Pipeline (V5.4):**
   - **LLM Summarization:** Batch prompting via NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`).
-  - **Semantic Deduplication:** Embedding-based near-duplicate detection (`nvidia/llama-nemotron-embed-1b-v2`).
+  - **Semantic Deduplication (NumPy Optimized):** Embedding-based near-duplicate detection (`nvidia/llama-nemotron-embed-1b-v2`).
   - **AI Categorization:** LLM multi-label classification enriching keyword-based tagging (`meta/llama-3.1-8b-instruct`).
   - **Neural Reranking:** Passage reranker blended with heuristic scoring (`nvidia/llama-nemotron-rerank-1b-v2`).
-- **Secure Delivery:** Individual email dispatch to protect recipient privacy and prevent spam flags.
+  - **IOC Extraction:** Regex-based extraction of IP addresses, Domains, and File Hashes (MD5, SHA1, SHA256).
+- **Dynamic Content:** Generates specific Daily, Weekly, or Monthly editions automatically.
+- **Secure Delivery:** Individual email dispatch to protect recipient privacy, including an auto-generated CSV attachment for threat hunting.
 - **Automated Scheduling:** Systemd timer templates and Docker-based scheduler included.
 
 ## Installation
@@ -60,8 +62,10 @@ This will start the internal scheduler which runs the pipeline according to the 
 ### Run manually (CLI)
 ```bash
 source venv/bin/activate
-./run.py --edition daily --dry-run  # Dry run (logs content)
-./run.py --edition daily            # Generate and send
+./run.py --edition daily --dry-run  # Dry run (logs content without sending email)
+./run.py --edition daily            # Generate and send daily edition
+./run.py --edition weekly           # Generate and send weekly edition
+./run.py --edition monthly          # Generate and send monthly edition
 ```
 
 ### Scheduled Runs (Systemd)
