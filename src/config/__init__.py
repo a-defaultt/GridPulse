@@ -41,3 +41,10 @@ NVIDIA_KEYS = [
 ]
 NVIDIA_KEYS = [k for k in NVIDIA_KEYS if k] # Filter out empty
 NVIDIA_TIMEOUT = int(os.getenv("NVIDIA_TIMEOUT_SECONDS", 120))
+
+# V5.2 AI Enhancement Models
+AI_ENHANCEMENTS = os.getenv("AI_ENHANCEMENTS", "true").lower() in ("true", "1", "yes")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nvidia/llama-nemotron-embed-1b-v2")
+CATEGORIZER_MODEL = os.getenv("CATEGORIZER_MODEL", "meta/llama-3.1-8b-instruct")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "nvidia/llama-nemotron-rerank-1b-v2")
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.85"))
