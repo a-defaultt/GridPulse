@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 SOURCES = {
     "ip": "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
-    "domain": "https://rules.emergingthreats.net/blockrules/emerging-botcc.domains",
+    "domain": "https://feodotracker.abuse.ch/downloads/domainblocklist.txt",
 }
 REQUEST_TIMEOUT = 30
 
