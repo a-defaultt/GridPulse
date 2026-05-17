@@ -67,10 +67,12 @@ The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicate
 *   **NOT IMPLEMENTED (TODO):** AlienVault OTX integration was previously a placeholder — now implemented in V5.5 (`otx_client.py`).
 
 ### 3.1b Parallel IOC Feeds (V5.5)
-In addition to RSS/NVD/CISA article sources, the pipeline now queries three parallel IOC intelligence feeds that run independently from `sources.yaml`:
+In addition to RSS/NVD/CISA article sources, the pipeline now queries five parallel IOC intelligence feeds that run independently from `sources.yaml`:
 *   **AbuseIPDB (`abuseipdb_client.py`):** Verified malicious IP blacklist. Requires `ABUSEIPDB_API_KEY`. Filtered by confidence ≥ 90 and capped at 500 IPs.
 *   **Emerging Threats (`emerging_threats_client.py`):** Proofpoint's free compromised IP and botnet C2 domain blocklists. No authentication required. Capped at 1000 entries per type.
 *   **OpenPhish (`openphish_client.py`):** Community feed of verified active phishing URLs. No authentication required. Automatically extracts domains from URLs for broader coverage.
+*   **ThreatFox (`threatfox_client.py`):** abuse.ch community-curated IOCs. Requires `THREATFOX_API_KEY` (due to their 2024 policy update). Filtered by confidence ≥ 75. Includes smart 401 fail-fast handling.
+*   **AlienVault OTX (`otx_client.py`):** Subscribed pulse indicators. Requires `OTX_API_KEY`. Paginated with a safety cap of 5 pages (100 pulses max). Includes a fast metadata-first fetch strategy and circuit breaker to prevent the pipeline from hanging on AlienVault outages.
 
 ### 3.1c Firecrawl Content Enrichment (V5.5)
 After ranking, the top 15 highest-scoring articles are sent to the **Firecrawl API** to fetch their full markdown content. This replaces the truncated RSS `summary` with complete article text, dramatically improving IOC extraction quality.
@@ -140,7 +142,7 @@ The project exclusively uses the official `openai` Python package for all LLM Ch
 
 ### 5.3 Delivery & Attachments (V5.5)
 *   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
-*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **four merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier.
+*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **six merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, ThreatFox, AlienVault OTX, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier.
 
 ### 5.4 External API Reference
 All external APIs used by the pipeline and their authentication:
@@ -153,6 +155,8 @@ All external APIs used by the pipeline and their authentication:
 | **AbuseIPDB** | `abuseipdb_client.py` | `ABUSEIPDB_API_KEY` | 1,000 req/day |
 | **Emerging Threats** | `emerging_threats_client.py` | None | Unrestricted |
 | **OpenPhish** | `openphish_client.py` | None | Unrestricted |
+| **ThreatFox** (abuse.ch) | `threatfox_client.py` | `THREATFOX_API_KEY` | Unrestricted |
+| **AlienVault OTX** | `otx_client.py` | `OTX_API_KEY` | Rate-limited per endpoint |
 | **Firecrawl** | `firecrawl_client.py` | `FIRECRAWL_API_KEY` | 1,000 credits/month |
 
 ## 6. Operational Guidelines

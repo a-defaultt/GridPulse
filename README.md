@@ -5,7 +5,7 @@ GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulne
 ## Features
 
 - **Multi-source Aggregation:** RSS feeds, NVD API, CISA KEV, and custom vendor scrapers (e.g., Adobe).
-- **Parallel Intelligence Feeds (V5.5):** AbuseIPDB, Emerging Threats, and OpenPhish streams automatically fetched and integrated.
+- **Parallel Intelligence Feeds (V5.5):** AbuseIPDB, Emerging Threats, OpenPhish, ThreatFox, and AlienVault OTX streams automatically fetched and integrated.
 - **Firecrawl Content Enrichment (V5.5):** Surgical markdown scraping of top-ranked articles for deep context.
 - **Production-Ready Core:** SQLite with WAL mode for concurrency, rotating logs, and robust error handling.
 - **AI-Powered Pipeline (V5.5):**

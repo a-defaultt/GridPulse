@@ -76,6 +76,7 @@ def fetch_recent_iocs(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> list[dict]:
 
         for attempt in range(max_retries):
             try:
+                # Step 1: Fetch metadata only
                 response = requests.get(
                     f"{OTX_BASE_URL}/pulses/subscribed",
                     headers=headers,
@@ -83,8 +84,9 @@ def fetch_recent_iocs(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> list[dict]:
                         "modified_since": _days_ago_iso(lookback_days),
                         "page":           page,
                         "limit":          20,
+                        "fields":         "id,name,tags,modified", # Fast metadata only
                     },
-                    timeout=REQUEST_TIMEOUT,
+                    timeout=15, # Fast timeout
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -92,7 +94,7 @@ def fetch_recent_iocs(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> list[dict]:
                 break # Success, break out of retry loop
 
             except requests.exceptions.Timeout:
-                logger.error(f"[OTX] Timeout on page {page} (Attempt {attempt+1}/{max_retries}).")
+                logger.error(f"[OTX] Timeout on page {page} metadata (Attempt {attempt+1}/{max_retries}).")
                 if attempt < max_retries - 1:
                     time.sleep(backoff * (attempt + 1))
             except requests.exceptions.HTTPError as e:
@@ -113,18 +115,35 @@ def fetch_recent_iocs(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> list[dict]:
         if not pulses:
             break   # No more pages
 
-        logger.info(f"[OTX] Page {page} — {len(pulses)} pulses received.")
+        logger.info(f"[OTX] Page {page} — {len(pulses)} pulses received. Fetching indicators...")
 
+        # Step 2: Fetch indicators per pulse
         for pulse in pulses:
+            pulse_id       = pulse.get("id")
             pulse_name     = pulse.get("name", "Unknown Pulse")
             malware_family = _extract_malware_family(pulse)
 
-            for indicator in pulse.get("indicators", []):
-                ioc = _normalize_indicator(
-                    indicator, pulse_name, malware_family, fetched_at
+            if not pulse_id:
+                continue
+
+            try:
+                indicators_resp = requests.get(
+                    f"{OTX_BASE_URL}/pulses/{pulse_id}/indicators",
+                    headers=headers,
+                    params={"limit": 100},
+                    timeout=15,
                 )
-                if ioc:
-                    all_iocs.append(ioc)
+                indicators_resp.raise_for_status()
+                indicators_data = indicators_resp.json()
+                
+                for indicator in indicators_data.get("results", []):
+                    ioc = _normalize_indicator(
+                        indicator, pulse_name, malware_family, fetched_at
+                    )
+                    if ioc:
+                        all_iocs.append(ioc)
+            except Exception as e:
+                logger.error(f"[OTX] Failed to fetch indicators for pulse {pulse_id}: {e}")
 
         # OTX returns a `next` URL when more pages exist
         if not data.get("next"):
