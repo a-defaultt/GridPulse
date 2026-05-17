@@ -1,17 +1,19 @@
-# GridPulse V5.4
+# GridPulse V5.5
 
 GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, extracts Indicators of Compromise (IOCs), and delivers curated daily/weekly/monthly briefings with actionable CSV attachments.
 
 ## Features
 
 - **Multi-source Aggregation:** RSS feeds, NVD API, CISA KEV, and custom vendor scrapers (e.g., Adobe).
+- **Parallel Intelligence Feeds (V5.5):** AbuseIPDB, Emerging Threats, and OpenPhish streams automatically fetched and integrated.
+- **Firecrawl Content Enrichment (V5.5):** Surgical markdown scraping of top-ranked articles for deep context.
 - **Production-Ready Core:** SQLite with WAL mode for concurrency, rotating logs, and robust error handling.
-- **AI-Powered Pipeline (V5.4):**
+- **AI-Powered Pipeline (V5.5):**
   - **LLM Summarization:** Batch prompting via NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`).
   - **Semantic Deduplication (NumPy Optimized):** Embedding-based near-duplicate detection (`nvidia/llama-nemotron-embed-1b-v2`).
   - **AI Categorization:** LLM multi-label classification enriching keyword-based tagging (`meta/llama-3.1-8b-instruct`).
   - **Neural Reranking:** Passage reranker blended with heuristic scoring (`nvidia/llama-nemotron-rerank-1b-v2`).
-  - **IOC Extraction:** Regex-based extraction of IP addresses, Domains, and File Hashes (MD5, SHA1, SHA256).
+  - **Deep IOC Extraction:** Regex-based extraction running on Firecrawl's full markdown content instead of just RSS summaries.
 - **Dynamic Content:** Generates specific Daily, Weekly, or Monthly editions automatically.
 - **Secure Delivery:** Individual email dispatch to protect recipient privacy, including an auto-generated CSV attachment for threat hunting.
 - **Automated Scheduling:** Systemd timer templates and Docker-based scheduler included.
