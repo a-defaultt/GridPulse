@@ -12,13 +12,26 @@ from src.config import NVIDIA_CATEGORIZER_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA
 
 logger = logging.getLogger(__name__)
 
-# Canonical category list the LLM is asked to choose from
 CATEGORIES = [
     "vulnerability", "ransomware", "malware", "data-breach",
     "state-sponsored", "phishing", "supply-chain", "zero-day",
     "patch-update", "regulatory", "insider-threat", "iot-ot",
     "cloud-security", "tools", "general",
 ]
+
+def _safe_parse_json(text: str):
+    """Extracts the first valid JSON object/array from LLM output, ignoring trailing garbage."""
+    decoder = json.JSONDecoder()
+    text = text.strip()
+    try:
+        obj, _ = decoder.raw_decode(text)   # stops after first complete object/array
+        return obj
+    except json.JSONDecodeError:
+        # Fallback: try stripping markdown fences
+        clean = text.replace("```json", "").replace("```", "").strip()
+        obj, _ = decoder.raw_decode(clean)
+        return obj
+
 
 
 def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
@@ -85,14 +98,7 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
                 )
 
                 content = response.choices[0].message.content
-
-                # Strip markdown code fences if present
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0].strip()
-
-                results = json.loads(content)
+                results = _safe_parse_json(content)
 
                 # Handle dict-wrapped responses (some models wrap in {"results": [...]})
                 if isinstance(results, dict):
