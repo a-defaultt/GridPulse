@@ -1,4 +1,4 @@
-# GridPulse V5.5: Production-Ready Cyber Intelligence Aggregator
+# GridPulse V5.6: Production-Ready Cyber Intelligence Aggregator
 
 ## 1. Executive Summary
 GridPulse is a self-hosted platform designed to solve the "noise" problem in cybersecurity intelligence. Built on **Python 3.12**, it aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated newsletters.
@@ -12,13 +12,14 @@ GridPulse/
 ├── logs/                   # Rotating application logs (gridpulse.log)
 ├── src/                    # Primary Source Code
 │   ├── aggregator/         # Data Ingestion Layer
-│   │   ├── rss_fetcher.py      # Universal RSS parser with score filtering
-│   │   ├── nvd_client.py       # NVD 2.0 API integration
-│   │   ├── cisa_kev.py         # CISA Known Exploited Vulns integration
-│   │   ├── threatfox_client.py  # abuse.ch ThreatFox IOC feed (V5.5)
-│   │   ├── otx_client.py        # AlienVault OTX IOC feed (V5.5)
-│   │   ├── firecrawl_client.py  # Surgical full-content fetcher (V5.5)
-│   │   └── vendor_advisories.py # Legacy scrapers (e.g., Adobe fallback)
+│   │   ├── rss_fetcher.py           # Universal RSS parser with score filtering
+│   │   ├── nvd_client.py            # NVD 2.0 API integration
+│   │   ├── cisa_kev.py              # CISA Known Exploited Vulns integration
+│   │   ├── abuseipdb_client.py      # AbuseIPDB verified IP blacklist (V5.5, cached)
+│   │   ├── emerging_threats_client.py # Proofpoint compromised IPs/domains (V5.5, cached)
+│   │   ├── openphish_client.py      # OpenPhish active phishing URLs (V5.5, cached)
+│   │   ├── firecrawl_client.py      # Surgical full-content fetcher (V5.5)
+│   │   └── vendor_advisories.py     # Legacy scrapers (e.g., Adobe fallback)
 │   ├── config/             # Configuration & Source Management
 │   │   ├── __init__.py         # Environment loading & Per-feature key setup
 │   │   └── source_manager.py   # Hybrid YAML/DB source synchronization
@@ -64,13 +65,13 @@ GridPulse/
 The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicated clients. RSS sources are handled by a universal fetcher.
 *   **Adobe Logic:** Automatically detects if a vendor uses RSS or requires legacy scraping.
 *   **Score Filtering:** Ingests `min_score` for community feeds (e.g., Hacker News) to ensure quality.
-*   **NOT IMPLEMENTED (TODO):** AlienVault OTX integration was previously a placeholder — now implemented in V5.5 (`otx_client.py`).
+*   **Score Filtering:** All community feeds (e.g., Hacker News) respect a configurable `min_score` gate to suppress low-signal articles before they enter the pipeline.
 
-### 3.1b Parallel IOC Feeds (V5.5)
-In addition to RSS/NVD/CISA article sources, the pipeline now queries three parallel IOC intelligence feeds that run independently from `sources.yaml`:
-*   **AbuseIPDB (`abuseipdb_client.py`):** Verified malicious IP blacklist. Requires `ABUSEIPDB_API_KEY`. Filtered by confidence ≥ 90 and capped at 500 IPs.
-*   **Emerging Threats (`emerging_threats_client.py`):** Proofpoint's free compromised IP and botnet C2 domain blocklists. No authentication required. Capped at 1000 entries per type.
-*   **OpenPhish (`openphish_client.py`):** Community feed of verified active phishing URLs. No authentication required. Automatically extracts domains from URLs for broader coverage.
+### 3.1b Parallel IOC Feeds (V5.6)
+In addition to RSS/NVD/CISA article sources, the pipeline queries three parallel IOC intelligence feeds that run independently from `sources.yaml`. All three cache their results to `data/` for the calendar day so that running daily + weekly + monthly editions on the same day costs a single network round-trip each:
+*   **AbuseIPDB (`abuseipdb_client.py`):** Verified malicious IP blacklist. Requires `ABUSEIPDB_API_KEY`. Filtered by confidence ≥ 90, capped at 500 IPs. Cache: `data/abuseipdb_cache.json`.
+*   **Emerging Threats (`emerging_threats_client.py`):** Proofpoint's compromised IPs + maltrail generic malware domains. No auth required. Capped at 1000 entries per type. Cache: `data/emerging_threats_cache.json`.
+*   **OpenPhish (`openphish_client.py`):** Community feed of verified active phishing URLs. No auth required. Each URL is also decomposed into its base domain. Cache: `data/openphish_cache.json`.
 
 ### 3.1c Firecrawl Content Enrichment (V5.5)
 After ranking, the top 15 highest-scoring articles are sent to the **Firecrawl API** to fetch their full markdown content. This replaces the truncated RSS `summary` with complete article text, dramatically improving IOC extraction quality.
@@ -113,9 +114,10 @@ The pipeline uses specific NVIDIA NIM models for each task, assigned via dedicat
 #### 3. AI Categorization (`NVIDIA_CATEGORIZER_KEY`)
 *   **Endpoint:** `/v1/chat/completions`
 *   **🥇 Best (Default):** `meta/llama-3.1-8b-instruct` (Fast, cheap, highly deterministic for multi-label classification).
+*   **Resiliency (V5.6):** LLM responses are parsed with `_safe_parse_json()` which uses `raw_decode` to stop at the first valid JSON boundary, then falls back to bracket-pair extraction. This handles the known `meta/llama-3.1-8b-instruct` quirk of occasionally returning concatenated JSON objects under load.
 
 #### 4. Neural Reranking (`NVIDIA_RERANKER_KEY`)
-*   **Endpoint:** `/retrieval/nvidia/{model}/reranking` (Custom model-specific path)
+*   **Endpoint:** `https://ai.api.nvidia.com/v1/retrieval/nvidia/{model}/reranking` (Fixed absolute URL — the reranker uses a different host than the NIM chat/embed endpoints).
 *   **🥇 Best (Default):** `nvidia/llama-nemotron-rerank-1b-v2` (GPU-accelerated, purpose-built for passage reranking).
 
 ## 4. Database Architecture
@@ -140,7 +142,7 @@ The project exclusively uses the official `openai` Python package for all LLM Ch
 
 ### 5.3 Delivery & Attachments (V5.5)
 *   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
-*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **four merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier.
+*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **four merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier. Feed results are cached daily so multiple edition runs do not re-fetch the same data.
 
 ### 5.4 External API Reference
 All external APIs used by the pipeline and their authentication:
@@ -173,3 +175,4 @@ docker-compose up -d --build
 1.  **UTC Everywhere:** Never use `datetime.now()` without `timezone.utc`.
 2.  **Graceful Fallback:** AI modules must catch all exceptions and return the original article list so the pipeline continues.
 3.  **Atomic Edits:** ALWAYS update `schema.sql` and `PROJECT_SPECIFICATION.md` when changing core architecture or adding major features.
+4.  **Daily Caching:** IOC feed clients that call external APIs or public URLs MUST write results to `data/<feed>_cache.json` keyed by `YYYY-MM-DD`. This prevents exhausting rate-limited APIs when multiple pipeline editions run in the same day.
