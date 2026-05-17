@@ -24,8 +24,6 @@ from src.aggregator.firecrawl_client import enrich_articles_with_full_content
 from src.aggregator.abuseipdb_client import fetch_recent_iocs as fetch_abuseipdb_iocs
 from src.aggregator.emerging_threats_client import fetch_recent_iocs as fetch_et_iocs
 from src.aggregator.openphish_client import fetch_recent_iocs as fetch_openphish_iocs
-from src.aggregator.threatfox_client import fetch_recent_iocs as fetch_threatfox_iocs
-from src.aggregator.otx_client import fetch_recent_iocs as fetch_otx_iocs
 from src.utils.csv_utils import generate_ioc_csv
 from src.utils.datetime_utils import dt_to_str, utc_now
 import time
@@ -78,19 +76,15 @@ def run_pipeline(edition: str, dry_run: bool = False):
     abuseipdb_iocs = fetch_abuseipdb_iocs()
     et_iocs        = fetch_et_iocs()
     openphish_iocs = fetch_openphish_iocs()
-    threatfox_iocs = fetch_threatfox_iocs(lookback_days=1)
-    otx_iocs       = fetch_otx_iocs(lookback_days=1)
 
     # Merge all streams
-    all_iocs = abuseipdb_iocs + et_iocs + openphish_iocs + threatfox_iocs + otx_iocs + article_iocs
+    all_iocs = abuseipdb_iocs + et_iocs + openphish_iocs + article_iocs
 
     logger.info(
         f"IOC streams merged: "
         f"{len(abuseipdb_iocs)} AbuseIPDB + "
         f"{len(et_iocs)} EmergingThreats + "
         f"{len(openphish_iocs)} OpenPhish + "
-        f"{len(threatfox_iocs)} ThreatFox + "
-        f"{len(otx_iocs)} OTX + "
         f"{len(article_iocs)} article-extracted = "
         f"{len(all_iocs)} total"
     )
