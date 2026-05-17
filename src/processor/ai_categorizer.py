@@ -20,17 +20,27 @@ CATEGORIES = [
 ]
 
 def _safe_parse_json(text: str):
-    """Extracts the first valid JSON object/array from LLM output, ignoring trailing garbage."""
+    """
+    Extracts the first valid JSON object/array from LLM output.
+    Handles: trailing garbage, concatenated objects, markdown fences.
+    """
+    text = text.strip().replace("```json", "").replace("```", "").strip()
     decoder = json.JSONDecoder()
-    text = text.strip()
     try:
         obj, _ = decoder.raw_decode(text)   # stops after first complete object/array
         return obj
     except json.JSONDecodeError:
-        # Fallback: try stripping markdown fences
-        clean = text.replace("```json", "").replace("```", "").strip()
-        obj, _ = decoder.raw_decode(clean)
-        return obj
+        # Last resort: find the first complete bracket pair
+        for start_char, end_char in [('{', '}'), ('[', ']')]:
+            start = text.find(start_char)
+            end   = text.rfind(end_char)
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(text[start:end+1])
+                except json.JSONDecodeError:
+                    continue
+        raise   # give up, let the caller handle it
+
 
 
 
