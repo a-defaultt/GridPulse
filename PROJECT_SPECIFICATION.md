@@ -1,7 +1,7 @@
-# GridPulse V5: Production-Ready Cyber Intelligence Aggregator
+# GridPulse V5.5: Production-Ready Cyber Intelligence Aggregator
 
 ## 1. Executive Summary
-GridPulse is a self-hosted platform designed to solve the "noise" problem in cybersecurity intelligence. It aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated newsletters.
+GridPulse is a self-hosted platform designed to solve the "noise" problem in cybersecurity intelligence. Built on **Python 3.12**, it aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated newsletters.
 
 ## 2. File System Hierarchy
 ```text
@@ -15,6 +15,9 @@ GridPulse/
 │   │   ├── rss_fetcher.py      # Universal RSS parser with score filtering
 │   │   ├── nvd_client.py       # NVD 2.0 API integration
 │   │   ├── cisa_kev.py         # CISA Known Exploited Vulns integration
+│   │   ├── threatfox_client.py  # abuse.ch ThreatFox IOC feed (V5.5)
+│   │   ├── otx_client.py        # AlienVault OTX IOC feed (V5.5)
+│   │   ├── firecrawl_client.py  # Surgical full-content fetcher (V5.5)
 │   │   └── vendor_advisories.py # Legacy scrapers (e.g., Adobe fallback)
 │   ├── config/             # Configuration & Source Management
 │   │   ├── __init__.py         # Environment loading & Per-feature key setup
@@ -38,7 +41,7 @@ GridPulse/
 │   │   ├── ai_deduplicator.py  # Semantic embedding-based dedup (NumPy optimized)
 │   │   ├── ranker.py           # Heuristic CVSS/Source relevance scoring
 │   │   ├── ai_ranker.py        # Neural passage reranking & score blending
-│   │   ├── ioc_extractor.py    # Regex-based Indicator of Compromise extraction
+│   │   ├── ioc_extractor.py    # IOC extraction with full_content support (V5.5)
 │   │   └── freshness.py        # 7-day rolling window temporal filter
 │   ├── utils/              # Shared Utilities
 │   │   ├── csv_utils.py        # IOC CSV generation helpers
@@ -61,6 +64,18 @@ GridPulse/
 The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicated clients. RSS sources are handled by a universal fetcher.
 *   **Adobe Logic:** Automatically detects if a vendor uses RSS or requires legacy scraping.
 *   **Score Filtering:** Ingests `min_score` for community feeds (e.g., Hacker News) to ensure quality.
+*   **NOT IMPLEMENTED (TODO):** AlienVault OTX integration was previously a placeholder — now implemented in V5.5 (`otx_client.py`).
+
+### 3.1b Parallel IOC Feeds (V5.5)
+In addition to RSS/NVD/CISA article sources, the pipeline now queries two parallel IOC intelligence feeds that run independently from `sources.yaml`:
+*   **ThreatFox (`threatfox_client.py`):** abuse.ch community-curated IOCs. Requires `THREATFOX_API_KEY` (due to their 2024 policy update). Filtered by confidence ≥ 75. Includes smart 401 fail-fast handling.
+*   **AlienVault OTX (`otx_client.py`):** Subscribed pulse indicators. Requires `OTX_API_KEY`. Paginated with a safety cap of 5 pages (100 pulses max). Includes a circuit breaker that aborts pagination entirely if a page fails after 2 retry attempts (60s timeout each), preventing the pipeline from hanging on AlienVault outages.
+
+### 3.1c Firecrawl Content Enrichment (V5.5)
+After ranking, the top 15 highest-scoring articles are sent to the **Firecrawl API** to fetch their full markdown content. This replaces the truncated RSS `summary` with complete article text, dramatically improving IOC extraction quality.
+*   **Budget Guard:** Hard-capped at 15 articles/run (≤ 450 credits/month on free tier).
+*   **402 Safety Net:** If a `402 Payment Required` response is received (credits exhausted), the crawl halts immediately and remaining articles keep their original summaries.
+*   **Requires:** `FIRECRAWL_API_KEY` in `.env` (optional — pipeline continues without it).
 
 ### 3.2 Intelligence Processing ("The Enrichment Pattern")
 GridPulse follows a strict **"Heuristic First, AI Second"** pattern. AI never replaces the baseline; it enriches it.
@@ -73,8 +88,10 @@ GridPulse follows a strict **"Heuristic First, AI Second"** pattern. AI never re
 3.  **Ranking:**
     *   *Heuristic:* Scores based on CVSS, KEV status, and Source Priority.
     *   *AI:* Uses a Neural Reranker to score relevance against a "SOC-focused" query, blending with the heuristic score (40/60 split).
-4.  **IOC Extraction (V5.4):**
-    *   Automatically extracts **IP addresses, Domains, and File Hashes (MD5, SHA1, SHA256)** from all processed articles using optimized regex patterns.
+4.  **IOC Extraction (V5.5):**
+    *   Automatically extracts **IP addresses, Domains, and File Hashes (MD5, SHA1, SHA256)** using optimized compiled regex patterns.
+    *   Excludes RFC-1918 private IP ranges and common noise domains.
+    *   Uses `full_content` (Firecrawl) when available, falls back to `summary`. Tags the `extraction_source` field so CSV consumers can weight quality tiers.
 
 ### 3.3 Generation & Summarization
 *   **Batching:** Sends articles in batches of 10-15 to the LLM to minimize latency and bypass rate limits.
@@ -114,11 +131,27 @@ To maximize the NVIDIA NIM free tier, the system maps keys by task:
 *   `NVIDIA_CATEGORIZER_KEY`
 *   `NVIDIA_RERANKER_KEY`
 
-If a feature-specific key hits a **429 Rate Limit**, the system automatically rotates through a shared `NVIDIA_KEYS` pool.
+**API Key Rotation (Rate Limit Evasion):**
+In `src/config/__init__.py`, all provided keys are aggregated into a deduplicated pool (`NVIDIA_KEYS`). If an AI module catches an `HTTP 429 Rate Limit` error, it automatically catches the exception, rotates to the next key in the pool, and retries the batch.
 
-### 5.2 Delivery & Attachments (V5.4)
+### 5.2 Standardized AI Client
+The project exclusively uses the official `openai` Python package for all LLM Chat and Embedding calls by swapping the `base_url` to `https://integrate.api.nvidia.com/v1`. The only exception is the Neural Reranker, which uses `requests` because the reranking endpoint is a custom path and not OpenAI-compatible.
+
+### 5.3 Delivery & Attachments (V5.5)
 *   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
-*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing all extracted Indicators of Compromise found in that edition's articles, providing actionable threat-hunting data.
+*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **three merged streams**: ThreatFox (verified community IOCs), AlienVault OTX (subscribed pulse indicators), and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier.
+
+### 5.4 External API Reference
+All external APIs used by the pipeline and their authentication:
+
+| API | Client File | Key Required | Free Tier Limits |
+|---|---|---|---|
+| **NVIDIA NIM** (Chat/Embed/Rerank) | `summary_generator.py`, `ai_*.py` | `NVIDIA_*_KEY` | Per-model rate limits |
+| **NVD 2.0** | `nvd_client.py` | `NVD_API_KEY` | 5 req/30s without key, 50 with |
+| **CISA KEV** | `cisa_kev.py` | None | Unrestricted |
+| **ThreatFox** (abuse.ch) | `threatfox_client.py` | `THREATFOX_API_KEY` | Unrestricted |
+| **AlienVault OTX** | `otx_client.py` | `OTX_API_KEY` | Rate-limited per endpoint |
+| **Firecrawl** | `firecrawl_client.py` | `FIRECRAWL_API_KEY` | 1,000 credits/month |
 
 ## 6. Operational Guidelines
 

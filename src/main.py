@@ -20,6 +20,9 @@ from src.processor import process_all
 from src.generator import generate_newsletter_all
 from src.delivery.email_sender import send_individual_emails
 from src.processor.ioc_extractor import process_article_iocs, get_all_unique_iocs
+from src.aggregator.firecrawl_client import enrich_articles_with_full_content
+from src.aggregator.threatfox_client import fetch_recent_iocs as fetch_threatfox_iocs
+from src.aggregator.otx_client import fetch_recent_iocs as fetch_otx_iocs
 from src.utils.csv_utils import generate_ioc_csv
 from src.utils.datetime_utils import dt_to_str, utc_now
 import time
@@ -50,15 +53,37 @@ def run_pipeline(edition: str, dry_run: bool = False):
         logger.error("No articles survived processing. Aborting.")
         return
 
+    # --- Stage 2.5: Firecrawl Enrichment (top articles only) ---
+    # Surgical crawl — only the highest-value articles get full content.
+    # This runs AFTER ranking so we know which articles matter most.
+    top_articles = processed[:15]  # Already sorted by relevance_score from ranker
+    top_articles = enrich_articles_with_full_content(top_articles)
+
+    # Merge enriched back into full list
+    enriched_urls = {a.get('url') for a in top_articles if a.get('url')}
+    processed = top_articles + [a for a in processed[15:] if a.get('url') not in enriched_urls]
+
     # --- Stage 3: Generate --- (raises on failure → aborts pipeline)
     newsletter = generate_newsletter_all(processed, edition, db_path)
 
     # --- Stage 3.5: Extract IOCs for CSV attachment ---
-    # We include all unique IOCs from processed articles.
+    # Article IOC extraction (now runs on full_content where available)
     processed_with_iocs = process_article_iocs(processed)
-    iocs = get_all_unique_iocs(processed_with_iocs)
-        
-    ioc_csv_content = generate_ioc_csv(iocs)
+    article_iocs = get_all_unique_iocs(processed_with_iocs)
+
+    # Parallel IOC feeds (ThreatFox + OTX)
+    threatfox_iocs = fetch_threatfox_iocs(lookback_days=1)
+    otx_iocs = fetch_otx_iocs(lookback_days=1)
+
+    # Merge all IOC streams — source field distinguishes origin
+    all_iocs = threatfox_iocs + otx_iocs + article_iocs
+    logger.info(
+        f"IOC streams merged: {len(threatfox_iocs)} ThreatFox + "
+        f"{len(otx_iocs)} OTX + {len(article_iocs)} article-extracted = "
+        f"{len(all_iocs)} total"
+    )
+
+    ioc_csv_content = generate_ioc_csv(all_iocs)
     ioc_filename = f"gridpulse_iocs_{edition}_{utc_now().strftime('%Y%m%d')}.csv"
 
     # --- Stage 4: Deliver ---
@@ -96,4 +121,4 @@ def run_pipeline(edition: str, dry_run: bool = False):
         logger.info("Dry run — newsletter not sent. Content logged at DEBUG level.")
         logger.debug(newsletter.get('content_text', ''))
         if ioc_csv_content:
-            logger.debug(f"Generated IOC CSV ({len(iocs)} items): {ioc_filename}")
+            logger.debug(f"Generated IOC CSV ({len(all_iocs)} items): {ioc_filename}")
