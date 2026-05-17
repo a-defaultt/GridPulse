@@ -29,6 +29,7 @@ EMAIL_TO = os.getenv("EMAIL_TO", "").split(",")
 NVD_API_KEY = os.getenv("NVD_API_KEY")
 OTX_API_KEY = os.getenv("OTX_API_KEY")
 THREATFOX_API_KEY = os.getenv("THREATFOX_API_KEY")
+ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
 FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
 
 # LLM Settings
