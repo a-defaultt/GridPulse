@@ -1,11 +1,11 @@
-# GridPulse V5.5
+# GridPulse V5.6
 
 GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, extracts Indicators of Compromise (IOCs), and delivers curated daily/weekly/monthly briefings with actionable CSV attachments.
 
 ## Features
 
 - **Multi-source Aggregation:** RSS feeds, NVD API, CISA KEV, and custom vendor scrapers (e.g., Adobe).
-- **Parallel Intelligence Feeds (V5.5):** AbuseIPDB, Emerging Threats, and OpenPhish streams automatically fetched and integrated.
+- **Parallel Intelligence Feeds (V5.6):** Three high-fidelity IOC streams run alongside the article pipeline — AbuseIPDB (verified malicious IPs), Emerging Threats (compromised IPs + malware domains), and OpenPhish (active phishing URLs + domains). All three results are **cached daily** so running multiple editions in the same day costs only one network request each.
 - **Firecrawl Content Enrichment (V5.5):** Surgical markdown scraping of top-ranked articles for deep context.
 - **Production-Ready Core:** SQLite with WAL mode for concurrency, rotating logs, and robust error handling.
 - **AI-Powered Pipeline (V5.5):**
@@ -90,6 +90,16 @@ Each AI feature has its own dedicated key for independent rate limits:
 | `NVIDIA_RERANKER_KEY` | Neural reranking | `nvidia/llama-nemotron-rerank-1b-v2` |
 
 > **Tip:** One API key from build.nvidia.com works for all models. Use separate keys only if you need independent rate limit pools.
+
+### IOC Feed Keys
+
+| Key | Feed | Notes |
+|-----|------|-------|
+| `ABUSEIPDB_API_KEY` | AbuseIPDB blacklist | Optional. Free tier: 1,000 req/day. Results cached daily to `data/abuseipdb_cache.json`. |
+| *(none)* | Emerging Threats | Public feed — no key needed. Cached to `data/emerging_threats_cache.json`. |
+| *(none)* | OpenPhish | Public feed — no key needed. Cached to `data/openphish_cache.json`. |
+
+> **Tip:** Because all three feeds cache their results for the calendar day, you can safely run daily + weekly + monthly editions without hitting rate limits.
 
 ### Disabling AI Enhancements
 
