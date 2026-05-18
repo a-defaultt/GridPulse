@@ -59,9 +59,9 @@ def neural_rerank(articles: List[Dict]) -> List[Dict]:
     # The reranker uses a dedicated NVIDIA retrieval/reranking endpoint
     # Pattern: {LLM_BASE_URL}/retrieval/nvidia/{model-name}/reranking
     # We strip the trailing 'v1' from LLM_BASE_URL if it exists to construct the path correctly.
-    base_api_url = LLM_BASE_URL.replace("/v1", "")
-    api_url = f"{base_api_url.rstrip('/')}/retrieval/nvidia/{RERANKER_MODEL.split('/')[-1]}/reranking"
-    
+    RERANKER_BASE_URL = "https://ai.api.nvidia.com/v1"
+    api_url = f"{RERANKER_BASE_URL}/retrieval/nvidia/{RERANKER_MODEL.split('/')[-1]}/reranking"
+
     headers = {
         "Authorization": f"Bearer {reranker_key}",
         "Content-Type": "application/json",
