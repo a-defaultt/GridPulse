@@ -89,7 +89,10 @@ def run_pipeline(edition: str, dry_run: bool = False):
         f"{len(all_iocs)} total"
     )
 
-    ioc_csv_content = generate_ioc_csv(all_iocs)
+    from src.processor.ioc_tracker import track_and_filter_iocs
+    filtered_iocs = track_and_filter_iocs(all_iocs, edition)
+
+    ioc_csv_content = generate_ioc_csv(filtered_iocs)
     ioc_filename = f"gridpulse_iocs_{edition}_{utc_now().strftime('%Y%m%d')}.csv"
 
     # --- Stage 4: Deliver ---
