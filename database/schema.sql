@@ -67,3 +67,14 @@ CREATE INDEX IF NOT EXISTS idx_articles_processed   ON articles(is_processed);
 CREATE INDEX IF NOT EXISTS idx_newsletters_type     ON newsletters(edition_type, edition_number DESC);
 CREATE INDEX IF NOT EXISTS idx_na_lookup            ON newsletter_articles(edition_type, edition_number);
 CREATE INDEX IF NOT EXISTS idx_na_article           ON newsletter_articles(article_id);
+
+CREATE TABLE IF NOT EXISTS iocs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ioc_value      TEXT    NOT NULL,
+    ioc_type       TEXT    NOT NULL,
+    source         TEXT    NOT NULL,
+    first_seen     TEXT    NOT NULL,         -- ISO 8601 UTC string
+    UNIQUE(ioc_value, ioc_type)
+);
+CREATE INDEX IF NOT EXISTS idx_iocs_first_seen ON iocs(first_seen);
+
