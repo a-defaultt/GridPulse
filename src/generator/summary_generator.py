@@ -1,34 +1,54 @@
 # src/generator/summary_generator.py
 import logging
 import json
+import hashlib
 from typing import List, Dict
 from openai import OpenAI
 from src.config import LLM_BASE_URL, NVIDIA_SUMMARIZER_KEY, NVIDIA_KEYS, LLM_MODEL, NVIDIA_TIMEOUT
+from src.database.db_handler import get_ai_cache, set_ai_cache
 
 logger = logging.getLogger(__name__)
 
 def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
     """
     Generate summaries for articles in batches of 10 using LLM.
-    V5 Enhancement: Uses OpenAI client and JSON batch prompting.
-    V5.1 Enhancement: Multi-key rotation for NVIDIA free tier limits.
-    V5.2 Enhancement: Uses dedicated NVIDIA_SUMMARIZER_KEY.
+    Uses SQLite cache to avoid redundant summarization.
     """
-    # Build local key list: dedicated summarizer key first, then rotation pool
+    if not articles:
+        return articles
+
+    # V5.7: Check cache first
+    missing_articles = []
+    for a in articles:
+        input_text = f"{a.get('title', '')}. {a.get('summary', '')[:500]}"
+        text_hash = hashlib.sha256(input_text.encode('utf-8')).hexdigest()
+        cached = get_ai_cache(text_hash, LLM_MODEL, 'summary')
+        if cached:
+            a['llm_summary'] = cached.decode('utf-8')
+        else:
+            missing_articles.append(a)
+
+    if not missing_articles:
+        logger.info("All summaries found in cache.")
+        return articles
+
+    logger.info(f"Generating LLM summaries for {len(missing_articles)} articles ({len(articles) - len(missing_articles)} cached)")
+
+    # Build local key list
     local_keys = list(dict.fromkeys(
         [NVIDIA_SUMMARIZER_KEY] + NVIDIA_KEYS
     )) if NVIDIA_SUMMARIZER_KEY else NVIDIA_KEYS
 
     if not local_keys:
-        logger.warning("No LLM API keys found. Skipping LLM summaries.")
+        logger.warning("No LLM API keys found. Skipping remaining LLM summaries.")
         return articles
 
     batch_size = 10
     current_key_index = 0
     
-    for i in range(0, len(articles), batch_size):
-        batch = articles[i:i + batch_size]
-        logger.info(f"Generating LLM summaries for batch {i//batch_size + 1} ({len(batch)} articles)")
+    for i in range(0, len(missing_articles), batch_size):
+        batch = missing_articles[i:i + batch_size]
+        logger.info(f"Batch {i//batch_size + 1}/{len(missing_articles)//batch_size + 1}")
         
         # Prepare prompt
         prompt_data = [
@@ -60,7 +80,6 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
                 )
                 
                 content = response.choices[0].message.content
-                # ... same parsing logic as before ...
                 if '```json' in content:
                     content = content.split('```json')[1].split('```')[0].strip()
                 elif '```' in content:
@@ -76,18 +95,24 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
                 for s in summaries:
                     idx = s.get('id')
                     if isinstance(idx, int) and idx < len(batch):
-                        batch[idx]['llm_summary'] = s.get('summary')
+                        summary_text = s.get('summary')
+                        batch[idx]['llm_summary'] = summary_text
+                        
+                        # Cache it
+                        a = batch[idx]
+                        input_text = f"{a.get('title', '')}. {a.get('summary', '')[:500]}"
+                        text_hash = hashlib.sha256(input_text.encode('utf-8')).hexdigest()
+                        set_ai_cache(text_hash, "nvidia", LLM_MODEL, 'summary', input_text, summary_text.encode('utf-8'))
                 
                 success = True
                 
             except Exception as e:
-                # Check for rate limit (429)
                 if "429" in str(e) or "rate limit" in str(e).lower():
-                    logger.warning(f"Rate limit hit for key {current_key_index + 1}. Rotating to next key.")
+                    logger.warning(f"Rate limit hit for key {current_key_index + 1}. Rotating.")
                     current_key_index = (current_key_index + 1) % len(local_keys)
                     attempts_with_keys += 1
                 else:
                     logger.error(f"LLM batch summary generation failed: {e}")
-                    break # Other errors abort this batch
+                    break
                     
     return articles

@@ -39,7 +39,8 @@ def generate_weekly_newsletter(articles: list[dict], edition_number: int) -> dic
             'content_html': html_content,
             'content_text': text_content,
             'article_count': len(articles),
-            'edition_number': edition_number
+            'edition_number': edition_number,
+            'articles': articles
         }
     except Exception as e:
         logger.error(f"Error generating weekly newsletter: {e}")

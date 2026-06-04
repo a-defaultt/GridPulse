@@ -4,24 +4,24 @@ import smtplib
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Dict, List
+from typing import Dict, List, Optional
 from src.config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO
 from email.mime.application import MIMEApplication
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-def send_individual_emails(newsletter: Dict, attachment_content: Optional[str] = None, attachment_filename: Optional[str] = None):
+def send_individual_emails(newsletter: Dict, attachment_content: Optional[str] = None, attachment_filename: Optional[str] = None, recipients_override: Optional[List[str]] = None):
     """
     Send the newsletter individually to each recipient in EMAIL_TO.
     V5 Enhancement: Loop through recipients for privacy and spam protection.
     V5.3 Enhancement: Support for CSV attachments (IOCs).
+    Test sends can pass recipients_override to avoid mailing production recipients.
     """
     if not SMTP_USER or not SMTP_PASSWORD:
         logger.warning("SMTP credentials not set. Email delivery skipped.")
         return
 
-    recipients = EMAIL_TO
+    recipients = recipients_override if recipients_override is not None else EMAIL_TO
     if not recipients:
         logger.warning("No recipients in EMAIL_TO. Delivery skipped.")
         return

@@ -3,11 +3,13 @@
 # V5.4 Enhancement: Optimized with NumPy for large article sets.
 
 import logging
+import hashlib
 from typing import List, Dict, Optional
 import numpy as np
 
 from openai import OpenAI
 from src.config import NVIDIA_EMBEDDING_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, EMBEDDING_MODEL
+from src.database.db_handler import get_ai_cache, set_ai_cache
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +45,26 @@ def _generate_embeddings(texts: List[str], client: OpenAI) -> Optional[np.ndarra
         return None
 
 
+def _get_cached_embeddings(texts: List[str]) -> tuple[List[np.ndarray | None], List[int]]:
+    """Check cache for embeddings. Returns (results, missing_indices)."""
+    results = []
+    missing_indices = []
+    for i, text in enumerate(texts):
+        text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        cached_blob = get_ai_cache(text_hash, EMBEDDING_MODEL, 'embedding')
+        if cached_blob:
+            embedding = np.frombuffer(cached_blob, dtype=np.float32)
+            results.append(embedding)
+        else:
+            results.append(None)
+            missing_indices.append(i)
+    return results, missing_indices
+
+
 def semantic_deduplicate(articles: List[Dict]) -> List[Dict]:
     """
     Remove semantically similar articles using embedding cosine similarity.
-    Optimized using NumPy matrix operations for large datasets.
+    Uses SQLite cache to avoid redundant API calls.
     """
     if len(articles) < 2:
         return articles
@@ -61,8 +79,6 @@ def semantic_deduplicate(articles: List[Dict]) -> List[Dict]:
         return articles
 
     # Limit semantic dedup to top articles to avoid excessive API costs/latency
-    # even with numpy, 3700 articles is a lot of API calls.
-    # Let's cap at 500 for now.
     MAX_ARTICLES = 500
     original_count = len(articles)
     if original_count > MAX_ARTICLES:
@@ -79,20 +95,40 @@ def semantic_deduplicate(articles: List[Dict]) -> List[Dict]:
         for a in articles_to_process
     ]
 
-    # Generate embeddings in batches
-    all_embeddings_list = []
-    batch_size = 50
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        embeddings = _generate_embeddings(batch, client)
-        if embeddings is None:
-            logger.warning("Embedding batch failed. Falling back — no semantic dedup for this run.")
-            return articles
-        all_embeddings_list.append(embeddings)
-
-    all_embeddings = np.vstack(all_embeddings_list)
+    # Check cache
+    all_embeddings_results, missing_indices = _get_cached_embeddings(texts)
     
-    # Normalize vectors for cosine similarity (dot product of normalized = cosine sim)
+    if missing_indices:
+        logger.info(f"Generating embeddings for {len(missing_indices)} articles ({len(texts) - len(missing_indices)} cached)")
+        texts_to_fetch = [texts[i] for i in missing_indices]
+        
+        # Generate embeddings in batches for missing ones
+        batch_size = 50
+        for i in range(0, len(texts_to_fetch), batch_size):
+            batch_texts = texts_to_fetch[i:i + batch_size]
+            batch_indices = missing_indices[i:i + batch_size]
+            
+            embeddings = _generate_embeddings(batch_texts, client)
+            if embeddings is None:
+                logger.warning("Embedding batch failed. Falling back — no semantic dedup for this run.")
+                return articles
+            
+            # Store in cache and update results
+            for j, emb in enumerate(embeddings):
+                idx = batch_indices[j]
+                text = batch_texts[j]
+                text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+                
+                # Ensure it's float32 for consistent BLOB storage
+                emb_32 = emb.astype(np.float32)
+                set_ai_cache(text_hash, "nvidia", EMBEDDING_MODEL, 'embedding', text, emb_32.tobytes())
+                all_embeddings_results[idx] = emb_32
+    else:
+        logger.info(f"All {len(texts)} embeddings found in cache.")
+
+    all_embeddings = np.vstack(all_embeddings_results)
+    
+    # Normalize vectors for cosine similarity
     norms = np.linalg.norm(all_embeddings, axis=1, keepdims=True)
     all_embeddings = all_embeddings / np.where(norms == 0, 1, norms)
     
@@ -106,8 +142,6 @@ def semantic_deduplicate(articles: List[Dict]) -> List[Dict]:
     for i in range(len(articles_to_process)):
         if is_duplicate[i]:
             continue
-        # Check all subsequent articles for similarity to article i
-        # similarities are in the row i, columns i+1 to end
         similarities = sim_matrix[i, i+1:]
         duplicates = np.where(similarities >= SIMILARITY_THRESHOLD)[0]
         

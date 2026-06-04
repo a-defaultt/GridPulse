@@ -2,16 +2,18 @@
 import logging
 import requests
 from typing import List, Dict
-from src.utils.datetime_utils import utc_now, dt_to_str
+from datetime import timedelta
+from src.utils.datetime_utils import utc_now, dt_to_str, str_to_dt
 
 logger = logging.getLogger(__name__)
 
-def fetch_cisa_kev() -> List[Dict]:
+def fetch_cisa_kev(days: int = 7) -> List[Dict]:
     """
     Fetch Known Exploited Vulnerabilities from CISA.
+    Filters by dateAdded to only include recent additions.
     """
     url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-    logger.info("Fetching CISA KEV catalog")
+    logger.info(f"Fetching CISA KEV catalog (last {days} days)")
     
     try:
         response = requests.get(url, timeout=15)
@@ -20,9 +22,23 @@ def fetch_cisa_kev() -> List[Dict]:
         
         vulnerabilities = data.get('vulnerabilities', [])
         articles = []
-        fetched_date = dt_to_str(utc_now())
+        now = utc_now()
+        cutoff = now - timedelta(days=days)
+        fetched_date = dt_to_str(now)
         
         for v in vulnerabilities:
+            date_added_str = v.get('dateAdded')
+            if date_added_str:
+                try:
+                    # dateAdded is typically YYYY-MM-DD
+                    date_added = str_to_dt(date_added_str)
+                    if date_added < cutoff:
+                        continue
+                except Exception:
+                    # If date parsing fails, include it just in case? Or skip?
+                    # Let's log and include it.
+                    logger.debug(f"Could not parse CISA KEV dateAdded: {date_added_str}")
+
             cve_id = v.get('cveID')
             vendor = v.get('vendorProject')
             product = v.get('product')

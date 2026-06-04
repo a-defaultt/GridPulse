@@ -1,25 +1,33 @@
 # src/aggregator/rss_fetcher.py
 import logging
 import feedparser
-from typing import List, Dict
+from typing import List, Dict, Optional
 from src.utils.datetime_utils import parse_rss_date, utc_now, dt_to_str
 
 logger = logging.getLogger(__name__)
 
 import re
 
-def fetch_rss_feed(source: Dict) -> List[Dict]:
+def fetch_rss_feed(source: Dict) -> tuple[List[Dict], Optional[str], Optional[str]]:
     """
     Fetch and parse an RSS feed.
-    Supports filtering by 'min_score' if present in the source config.
+    Supports incremental fetching via etag and last_modified.
     """
     source_name = source['name']
     url = source['url']
     min_score = source.get('min_score')
+    etag = source.get('etag')
+    modified = source.get('last_modified')
     
-    logger.info(f"Fetching RSS feed for '{source_name}' from {url}")
+    logger.info(f"Fetching RSS feed for '{source_name}'")
     try:
-        feed = feedparser.parse(url)
+        # feedparser.parse handles etag and modified headers
+        feed = feedparser.parse(url, etag=etag, modified=modified)
+        
+        if hasattr(feed, 'status') and feed.status == 304:
+            logger.info(f"RSS feed '{source_name}' not modified (304).")
+            return [], etag, modified
+
         if feed.bozo:
             logger.warning(f"RSS feed '{source_name}' might be malformed: {feed.bozo_exception}")
 
@@ -29,8 +37,6 @@ def fetch_rss_feed(source: Dict) -> List[Dict]:
         for entry in feed.entries:
             # Check min_score for Hacker News (hnrss.org)
             if min_score is not None:
-                # hnrss typically includes score in the description or via a special tag
-                # We'll try to extract it from the description: "Points: 123"
                 description = entry.get('summary', '')
                 score_match = re.search(r'Points: (\d+)', description)
                 if score_match:
@@ -58,7 +64,7 @@ def fetch_rss_feed(source: Dict) -> List[Dict]:
             else:
                 logger.debug(f"Skipping entry with no URL in '{source_name}'")
 
-        return articles
+        return articles, feed.get('etag'), feed.get('modified')
 
     except Exception as e:
         logger.error(f"Failed to fetch RSS feed '{source_name}': {e}")
