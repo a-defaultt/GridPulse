@@ -35,6 +35,8 @@ def main():
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Generate but do not send email')
+    parser.add_argument('--test-email', nargs='?', const='ahmed.slaimia@manucurist.com', default=None,
+                        help='Send only to the test recipient; defaults to ahmed.slaimia@manucurist.com')
     parser.add_argument('--log-level', default=os.getenv('LOG_LEVEL', 'INFO'),
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     args = parser.parse_args()
@@ -43,7 +45,7 @@ def main():
 
     # Late import: ensures logging is configured first
     from src.main import run_pipeline
-    run_pipeline(edition=args.edition, dry_run=args.dry_run)
+    run_pipeline(edition=args.edition, dry_run=args.dry_run, test_recipient=args.test_email)
 
 if __name__ == '__main__':
     main()

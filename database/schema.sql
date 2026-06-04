@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS sources (
     priority             INTEGER DEFAULT 1,
     topics               TEXT,
     last_fetched         TEXT,               -- ISO 8601 UTC string, nullable
+    etag                 TEXT,
+    last_modified        TEXT,
     consecutive_failures INTEGER DEFAULT 0,
     last_error           TEXT,
     override_enabled     INTEGER DEFAULT 1   -- manual runtime override
@@ -77,4 +79,16 @@ CREATE TABLE IF NOT EXISTS iocs (
     UNIQUE(ioc_value, ioc_type)
 );
 CREATE INDEX IF NOT EXISTS idx_iocs_first_seen ON iocs(first_seen);
+
+-- V5.7: AI Caching
+CREATE TABLE IF NOT EXISTS ai_cache (
+    hash         TEXT NOT NULL,
+    provider     TEXT NOT NULL,
+    model        TEXT NOT NULL,
+    result_type  TEXT NOT NULL, -- 'embedding', 'summary', 'category'
+    input_text   TEXT,
+    output_data  BLOB,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (hash, result_type)
+);
 

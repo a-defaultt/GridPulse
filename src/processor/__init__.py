@@ -12,17 +12,13 @@ from .ai_ranker import neural_rerank
 from src.config import AI_ENHANCEMENTS
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
 def process_all(articles: list[dict], db_path: str) -> list[dict]:
     """
     Full processing pipeline for articles.
-
-    V5.2 Enhancement: When AI_ENHANCEMENTS is enabled, each traditional
-    processing step is followed by its AI-powered counterpart.  The AI
-    steps *enrich* rather than replace — if an AI call fails, the
-    traditional result is preserved.
     """
     if not articles:
         return []
@@ -32,32 +28,48 @@ def process_all(articles: list[dict], db_path: str) -> list[dict]:
     else:
         logger.info("AI enhancements DISABLED — using traditional processing only")
 
-    # 1. Internal Dedup (exact URL/title match — fast, always runs first)
+    # 1. Internal Dedup
+    start = time.time()
     articles = deduplicate_articles(articles)
-
-    # 1b. Semantic Dedup (AI — catches near-duplicates exact match misses)
-    if AI_ENHANCEMENTS:
-        articles = semantic_deduplicate(articles)
+    logger.info(f"Internal dedup took {time.time() - start:.2f}s")
 
     # 2. Freshness
+    start = time.time()
     articles = filter_fresh_articles(articles, days=7)
+    logger.info(f"Freshness filtering took {time.time() - start:.2f}s")
 
-    # 3. Categorization & CVE extraction (keyword baseline — always runs)
-    articles = process_categories(articles)
-
-    # 3b. AI Categorization (enriches keyword categories with LLM context)
+    # 2b. Semantic Dedup
     if AI_ENHANCEMENTS:
+        start = time.time()
+        articles = semantic_deduplicate(articles)
+        logger.info(f"Semantic dedup took {time.time() - start:.2f}s")
+
+    # 3. Categorization
+    start = time.time()
+    articles = process_categories(articles)
+    logger.info(f"Traditional categorization took {time.time() - start:.2f}s")
+
+    # 3b. AI Categorization
+    if AI_ENHANCEMENTS:
+        start = time.time()
         articles = ai_categorize_batch(articles)
+        logger.info(f"AI categorization took {time.time() - start:.2f}s")
 
     # 4. Cross-Edition Dedup
+    start = time.time()
     ced = CrossEditionDeduplicator(db_path)
     articles = ced.filter_candidates(articles)
+    logger.info(f"Cross-edition dedup took {time.time() - start:.2f}s")
 
-    # 5. Ranking (heuristic baseline — always runs)
+    # 5. Ranking
+    start = time.time()
     articles = rank_articles(articles)
+    logger.info(f"Traditional ranking took {time.time() - start:.2f}s")
 
-    # 5b. Neural Reranking (blends neural scores with heuristic scores)
+    # 5b. Neural Reranking
     if AI_ENHANCEMENTS:
+        start = time.time()
         articles = neural_rerank(articles)
+        logger.info(f"Neural reranking took {time.time() - start:.2f}s")
 
     return articles

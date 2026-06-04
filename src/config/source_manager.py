@@ -108,23 +108,31 @@ class SourceManager:
     def get_enabled_sources(self) -> list[dict]:
         with self._get_conn() as conn:
             conn.row_factory = sqlite3.Row
+            # V5.7: Backoff — skip sources with > 5 consecutive failures
             cursor = conn.execute('''
                 SELECT * FROM sources
                 WHERE is_config_enabled = 1
                 AND COALESCE(override_enabled, 0) = 1
+                AND consecutive_failures < 5
                 ORDER BY priority DESC, name ASC
             ''')
             return [dict(row) for row in cursor.fetchall()]
 
     def mark_fetched(self, name: str, success: bool,
-                     error: Optional[str] = None, articles_count: int = 0):
+                     error: Optional[str] = None, articles_count: int = 0,
+                     etag: Optional[str] = None, last_modified: Optional[str] = None):
         now_str = dt_to_str(utc_now())
         with self._get_conn() as conn:
             if success:
                 conn.execute('''
-                    UPDATE sources SET last_fetched = ?, consecutive_failures = 0, last_error = NULL
+                    UPDATE sources SET 
+                        last_fetched = ?, 
+                        consecutive_failures = 0, 
+                        last_error = NULL,
+                        etag = COALESCE(?, etag),
+                        last_modified = COALESCE(?, last_modified)
                     WHERE name = ?
-                ''', (now_str, name))
+                ''', (now_str, etag, last_modified, name))
                 logger.info(f"Source '{name}': {articles_count} articles fetched")
             else:
                 conn.execute('''
