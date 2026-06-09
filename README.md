@@ -20,6 +20,13 @@ GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulne
 
 ## Installation
 
+### One-Command Setup (Linux)
+The fastest way to deploy on a new server. This script installs Docker, Docker Compose, and starts the project automatically:
+```bash
+chmod +x setup.sh && ./setup.sh
+```
+
+### Manual Installation
 1. **Clone the repository:**
    ```bash
    git clone <repo-url>
