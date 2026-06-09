@@ -56,6 +56,7 @@ GridPulse/
 ├── docker-entrypoint.sh    # Container startup and initialization script
 ├── requirements.txt        # Python dependency manifest (NumPy, OpenAI, etc.)
 ├── run.py                  # CLI Entry point with log rotation setup
+├── setup.sh                # One-command server provisioning and launch script
 └── sources.yaml            # Version-controlled ingestion definitions
 ```
 
@@ -158,6 +159,12 @@ All external APIs used by the pipeline and their authentication:
 | **Firecrawl** | `firecrawl_client.py` | `FIRECRAWL_API_KEY` | 1,000 credits/month |
 
 ## 6. Operational Guidelines
+
+### Server Deployment (One-Command)
+Use the setup script to provision a new server and start the project:
+```bash
+chmod +x setup.sh && ./setup.sh
+```
 
 ### Manual Execution
 ```bash
