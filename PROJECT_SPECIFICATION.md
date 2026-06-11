@@ -1,7 +1,7 @@
-# GridPulse V5.6: Production-Ready Cyber Intelligence Aggregator
+# GridPulse: Out-of-Band (OOB) Threat Intelligence & SecOps Dissemination Engine
 
 ## 1. Executive Summary
-GridPulse is a self-hosted platform designed to solve the "noise" problem in cybersecurity intelligence. Built on **Python 3.12**, it aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated newsletters.
+GridPulse is a self-hosted OOB threat intelligence and SecOps dissemination engine designed to solve the "noise" problem in cybersecurity intelligence. Built on **Python 3.12**, it aggregates data from dozens of sources, uses heuristic and AI-powered filters to deduplicate and rank information, and delivers high-signal summaries to security professionals via automated, out-of-band notifications.
 
 ## 2. File System Hierarchy
 ```text

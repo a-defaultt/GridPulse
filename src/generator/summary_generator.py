@@ -6,6 +6,7 @@ from typing import List, Dict
 from openai import OpenAI
 from src.config import LLM_BASE_URL, NVIDIA_SUMMARIZER_KEY, NVIDIA_KEYS, LLM_MODEL, NVIDIA_TIMEOUT
 from src.database.db_handler import get_ai_cache, set_ai_cache
+from src.utils.sanitizer import sanitize_content, wrap_with_delimiters, get_injection_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +51,25 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
         batch = missing_articles[i:i + batch_size]
         logger.info(f"Batch {i//batch_size + 1}/{len(missing_articles)//batch_size + 1}")
         
-        # Prepare prompt
+        # Prepare prompt - Sanitize input
         prompt_data = [
-            {"id": j, "title": a['title'], "summary": a['summary'][:500]} 
+            {
+                "id": j, 
+                "title": sanitize_content(a.get('title', '')), 
+                "summary": sanitize_content(a.get('summary', ''), max_chars=1000)
+            } 
             for j, a in enumerate(batch)
         ]
         
         system_prompt = (
             "You are a cybersecurity expert. Summarize the following news items for a professional newsletter. "
             "Keep each summary to 2-3 concise sentences focusing on the impact and recommended action. "
-            "Respond ONLY with a JSON list of objects, each containing 'id' and 'summary'."
+            "Respond ONLY with a JSON list of objects, each containing 'id' and 'summary'.\n\n"
+            f"{get_injection_instruction()}"
         )
+        
+        # Wrap data in delimiters
+        raw_content = wrap_with_delimiters(json.dumps(prompt_data))
         
         success = False
         attempts_with_keys = 0
@@ -74,7 +83,7 @@ def generate_summaries_batch(articles: List[Dict]) -> List[Dict]:
                     model=LLM_MODEL,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": json.dumps(prompt_data)}
+                        {"role": "user", "content": raw_content}
                     ],
                     response_format={"type": "json_object"} if "llama3" not in LLM_MODEL.lower() else None
                 )

@@ -19,11 +19,19 @@ TIMEZONE = os.getenv("TIMEZONE", "Africa/Tunis")
 
 # Email Settings
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_PORT = int(os.getenv("SMTP_PORT", 465))
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 EMAIL_FROM = os.getenv("EMAIL_FROM")
 EMAIL_TO = os.getenv("EMAIL_TO", "").split(",")
+
+# PGP Settings
+GPG_HOME = os.getenv("GPG_HOME", str(Path.home() / ".gnupg"))
+GPG_PASSPHRASE = os.getenv("GPG_PASSPHRASE")
+GPG_KEY_ID = os.getenv("GPG_KEY_ID")
+
+# OOB Fallback
+OOB_WEBHOOK_URL = os.getenv("OOB_WEBHOOK_URL")
 
 # API Keys
 NVD_API_KEY = os.getenv("NVD_API_KEY")
