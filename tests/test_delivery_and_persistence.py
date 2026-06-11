@@ -49,7 +49,7 @@ def test_upsert_articles_and_record_newsletter(db_path, monkeypatch):
 class FakeSMTP:
     sent_to = []
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, context=None):
         self.host = host
         self.port = port
 
@@ -58,9 +58,6 @@ class FakeSMTP:
 
     def __exit__(self, exc_type, exc, tb):
         return False
-
-    def starttls(self):
-        pass
 
     def login(self, user, password):
         pass
@@ -74,10 +71,11 @@ def test_send_individual_emails_uses_recipient_override(monkeypatch):
     monkeypatch.setattr(email_sender, "SMTP_USER", "user")
     monkeypatch.setattr(email_sender, "SMTP_PASSWORD", "password")
     monkeypatch.setattr(email_sender, "SMTP_HOST", "smtp.example.com")
-    monkeypatch.setattr(email_sender, "SMTP_PORT", 587)
+    monkeypatch.setattr(email_sender, "SMTP_PORT", 465)
     monkeypatch.setattr(email_sender, "EMAIL_FROM", "from@example.com")
     monkeypatch.setattr(email_sender, "EMAIL_TO", ["prod@example.com"])
-    monkeypatch.setattr(email_sender.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(email_sender, "GPG_KEY_ID", None)
+    monkeypatch.setattr(email_sender.smtplib, "SMTP_SSL", FakeSMTP)
     monkeypatch.setattr(email_sender.time, "sleep", lambda _: None)
 
     email_sender.send_individual_emails(

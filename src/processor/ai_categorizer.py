@@ -9,6 +9,7 @@ from typing import List, Dict
 
 from openai import OpenAI
 from src.config import NVIDIA_CATEGORIZER_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, CATEGORIZER_MODEL
+from src.utils.sanitizer import sanitize_content, wrap_with_delimiters, get_injection_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,8 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
         "Also extract any CVE IDs (format: CVE-YYYY-NNNNN) mentioned in the title or summary. "
         "Respond ONLY with a JSON array of objects, one per article: "
         '[{"id": 0, "categories": ["cat1", "cat2"], "cves": ["CVE-..."]}]. '
-        "If no CVEs are found, return an empty list for cves."
+        "If no CVEs are found, return an empty list for cves.\n\n"
+        f"{get_injection_instruction()}"
     )
 
     for i in range(0, len(articles), batch_size):
@@ -87,11 +89,14 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
         prompt_data = [
             {
                 "id": j,
-                "title": a.get("title", ""),
-                "summary": a.get("summary", "")[:400],
+                "title": sanitize_content(a.get("title", "")),
+                "summary": sanitize_content(a.get("summary", ""), max_chars=800),
             }
             for j, a in enumerate(batch)
         ]
+        
+        # Wrap data in delimiters
+        raw_content = wrap_with_delimiters(json.dumps(prompt_data))
 
         success = False
         attempts_with_keys = 0
@@ -102,7 +107,7 @@ def ai_categorize_batch(articles: List[Dict]) -> List[Dict]:
                     model=CATEGORIZER_MODEL,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": json.dumps(prompt_data)},
+                        {"role": "user", "content": raw_content},
                     ],
                     temperature=0.1,  # Low temperature for deterministic classification
                 )

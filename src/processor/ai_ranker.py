@@ -9,6 +9,7 @@ from typing import List, Dict
 
 import requests as http_requests  # Alias to avoid clash with any local names
 from src.config import NVIDIA_RERANKER_KEY, NVIDIA_KEYS, LLM_BASE_URL, NVIDIA_TIMEOUT, RERANKER_MODEL
+from src.utils.sanitizer import sanitize_content
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,10 @@ def neural_rerank(articles: List[Dict]) -> List[Dict]:
 
     # Prepare passages (title + truncated summary for each article)
     passages = [
-        {"text": f"{a.get('title', '')}. {a.get('summary', '')[:500]}"}
+        {
+            "text": f"{sanitize_content(a.get('title', ''))}. "
+                    f"{sanitize_content(a.get('summary', ''), max_chars=500)}"
+        }
         for a in articles
     ]
 

@@ -1,6 +1,6 @@
-# GridPulse V5.6
+# GridPulse: Out-of-Band (OOB) Threat Intelligence & SecOps Dissemination Engine
 
-GridPulse is a self-hosted cybersecurity newsletter aggregator. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, extracts Indicators of Compromise (IOCs), and delivers curated daily/weekly/monthly briefings with actionable CSV attachments.
+GridPulse is a self-hosted OOB threat intelligence and SecOps dissemination engine. It fetches vulnerability data, security news, and vendor advisories, processes them through an AI-powered intelligence pipeline, extracts Indicators of Compromise (IOCs), and delivers curated daily/weekly/monthly briefings with actionable CSV attachments.
 
 ## Features
 
