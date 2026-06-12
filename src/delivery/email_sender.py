@@ -60,8 +60,20 @@ def send_individual_emails(newsletter: Dict, attachment_content: Optional[str] =
     context = ssl.create_default_context()
 
     try:
-        # Connect to SMTP server using mandatory SSL
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+        # Determine connection method based on port
+        if SMTP_PORT == 465:
+            # Direct SSL
+            server_class = smtplib.SMTP_SSL
+            server_kwargs = {"context": context}
+        else:
+            # Standard SMTP (usually 587) with mandatory STARTTLS
+            server_class = smtplib.SMTP
+            server_kwargs = {}
+
+        with server_class(SMTP_HOST, SMTP_PORT, **server_kwargs) as server:
+            if SMTP_PORT != 465:
+                server.starttls(context=context)
+            
             server.login(SMTP_USER, SMTP_PASSWORD)
 
             for recipient in recipients:
