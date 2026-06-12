@@ -9,7 +9,8 @@ ENV TZ=UTC
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN (apt-get update || (sleep 5 && apt-get update)) && \
+    apt-get install -y --no-install-recommends --fix-missing \
     build-essential \
     libxml2-dev \
     libxslt-dev \
