@@ -11,9 +11,18 @@ def run_scheduler():
     Internal scheduler loop.
     Runs daily at 08:00 UTC, weekly on Mondays at 09:00 UTC, 
     and monthly on the 1st at 10:00 UTC.
+    V6 Enhancement: Trigger a baseline run on startup.
     """
     logger.info("Starting internal scheduler...")
     
+    # V6: Run on Startup baseline
+    logger.info("Performing initial startup run (Edition: daily)...")
+    try:
+        run_pipeline(edition='daily')
+        logger.info("Startup run completed successfully.")
+    except Exception as e:
+        logger.error(f"Startup run failed: {e}")
+
     # Schedule Daily
     schedule.every().day.at("08:00").do(run_pipeline, edition='daily')
     
