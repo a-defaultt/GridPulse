@@ -36,6 +36,17 @@ if [ ! -f .env ]; then
     echo "Created .env. Please ensure you edit it with your API keys later."
 fi
 
+# Core directory provisioning (V6 Hardening)
+# Pre-creating these prevents Docker from creating them as root.
+mkdir -p data logs
+
+# Capture and append host identification metadata for dynamic permission mapping
+# Using grep to avoid duplicate entries if the script is run multiple times
+if ! grep -q "HOST_UID" .env; then
+    echo "HOST_UID=$(id -u)" >> .env
+    echo "HOST_GID=$(id -g)" >> .env
+fi
+
 # 4. Build and Run
 echo "Building and starting GridPulse..."
 sudo docker compose up -d --build
