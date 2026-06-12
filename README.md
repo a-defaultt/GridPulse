@@ -117,6 +117,7 @@ To meet tight enterprise security and efficiency footprints, GridPulse completel
    ```bash
    docker compose up -d --build
    ```
+   *Note: Upon successful deployment, GridPulse immediately executes a "Run on Startup" baseline telemetry report. You should receive your first briefing within minutes.*
 
 ---
 
@@ -144,6 +145,20 @@ To mitigate LLM-based "jailbreak" or command injection attempts from malicious f
 
 ### JSON Recovery Parsers
 Because the ultra-fast `meta/llama-3.1-8b-instruct` model can occasionally output trailing text under load, classifications are evaluated using a custom `_safe_parse_json()` sequence. This utilizes `raw_decode` to halt immediately at the primary array boundary, dropping malformed trailing strings.
+
+---
+
+## Troubleshooting
+
+### Persistence & Permissions
+If you encounter `sqlite3.OperationalError: unable to open database file`, it is likely due to a host-to-container permission mismatch. 
+
+- **Automatic Fix**: Ensure you use the provided `setup.sh` script, which handles dynamic UID/GID mapping.
+- **Manual Fix**: If you ran `docker compose up` as root, you may need to reclaim ownership of the data directories:
+  ```bash
+  sudo chown -R $USER:$USER data logs
+  docker compose up -d --build
+  ```
 
 ---
 
