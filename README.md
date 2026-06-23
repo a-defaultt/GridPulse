@@ -15,8 +15,11 @@ GridPulse is a self-hosted, out-of-band (OOB) threat intelligence aggregation an
 - **NumPy-Optimized Semantic Deduplication:** Uses local NVIDIA text embedding models to detect and purge near-duplicate entries via vectorized matrix calculations, isolating up to 500 daily candidate records.
 - **Neural Passage Reranking:** Merges conventional severity metrics (CVSS, KEV status) with neural ranking evaluations to blend heuristic weights with context relevance on a custom 60/40 scoring split.
 - **Adversarial Ingestion Shield:** Implements a strict sanitization layer (`src/utils/sanitizer.py`) that isolates untrusted data in delimited blocks and enforces system-level execution constraints to prevent prompt injection.
-- **Cryptographic Payload Integrity:** Natively integrates PGP/GPG signing for every HTML report and CSV attachment, providing mathematical proof of origin and protection against transit tampering.
+- **Cryptographic Payload Integrity:** Natively integrates PGP/GPG signing for every HTML report, providing mathematical proof of origin and protection against transit tampering.
 - **OOB Failover Resiliency:** Features an automated pivot mechanism; if primary SMTP SSL dispatch fails or times out, the engine immediately pushes high-severity alerts to secure Webhooks (Slack/Teams/Discord).
+- **Local IOC Storage:** Automatically writes generated threat intelligence CSV reports to the local `data/` directory rather than attaching them to emails. This completely sidesteps SMTP gateway security scanners (e.g. Gmail `552 5.7.0`) that block transit of raw threat signature lists.
+- **Gzip Attachment Fallback:** Integrates on-the-fly `gzip` compression helper fallback for email attachments to prevent raw text scanning filters and minimize network transfer sizes.
+- **Startup Scheduler Guard:** Uses a database-backed 18-hour guard check during container start/restart sequences, checking if a briefing was already dispatched recently to prevent duplicate newsletter delivery.
 
 ---
 
@@ -52,8 +55,9 @@ graph TD
     D -->|3. CVSS/KEV Score Blended 60/40 with Neural Reranker| D
     D -->|4. Compiled Regex IOC Extraction| D
     D --> E(src/generator/ LLaMA-3.3-Nemotron Batch Summarization)
+    E -->|Save IOC CSV to Disk| I[(data/ gridpulse_iocs_*.csv)]
     E -->|PGP Cryptographic Signing| F(src/delivery/ SMTP SSL Server)
-    F -->|Ready-to-Hunt Briefings| G[SecOps Recipients + Signed CSV Attachment]
+    F -->|Ready-to-Hunt Briefings| G[SecOps Recipients]
     F -->|SMTP Failure Pivot| H[OOB Webhook: Slack / Teams / Discord]
 ```
 
