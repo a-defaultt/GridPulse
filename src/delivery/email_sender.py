@@ -3,6 +3,7 @@ import logging
 import smtplib
 import ssl
 import time
+import gzip
 import gnupg
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -91,11 +92,14 @@ def send_individual_emails(newsletter: Dict, attachment_content: Optional[str] =
                 msg.attach(MIMEText(text_content, "plain"))
                 msg.attach(MIMEText(html_content, "html"))
 
-                # Attach file if provided
+                # Attach file if provided — gzip-compressed to bypass Gmail security scanner
                 if attachment_content and attachment_filename:
-                    part = MIMEApplication(attachment_content.encode('utf-8'), Name=attachment_filename)
-                    part['Content-Disposition'] = f'attachment; filename="{attachment_filename}"'
+                    compressed_bytes = gzip.compress(attachment_content.encode('utf-8'))
+                    gz_filename = attachment_filename + '.gz'
+                    part = MIMEApplication(compressed_bytes, Name=gz_filename, _subtype='gzip')
+                    part['Content-Disposition'] = f'attachment; filename="{gz_filename}"'
                     msg.attach(part)
+                    logger.debug(f"Attachment '{gz_filename}' compressed ({len(compressed_bytes)} bytes gzip)")
 
                 try:
                     server.send_message(msg)
