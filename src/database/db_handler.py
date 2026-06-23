@@ -161,3 +161,15 @@ def set_ai_cache(item_hash: str, provider: str, model: str, result_type: str, in
                 output_data = excluded.output_data,
                 created_at = excluded.created_at
         """, (item_hash, provider, model, result_type, input_text, output_data, dt_to_str(utc_now())))
+
+
+def get_last_sent_date(edition: str) -> str | None:
+    """Retrieve the sent_date of the last sent newsletter for the given edition."""
+    with get_db_connection() as conn:
+        row = conn.execute("""
+            SELECT sent_date FROM newsletters
+            WHERE edition_type = ? AND status = 'sent'
+            ORDER BY sent_date DESC LIMIT 1
+        """, (edition,)).fetchone()
+        return row[0] if row else None
+

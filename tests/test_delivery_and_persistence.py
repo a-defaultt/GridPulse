@@ -84,3 +84,25 @@ def test_send_individual_emails_uses_recipient_override(monkeypatch):
     )
 
     assert FakeSMTP.sent_to == ["ahmed.slaimia@manucurist.com"]
+
+
+def test_get_last_sent_date(db_path, monkeypatch):
+    monkeypatch.setattr(db_handler, "DATABASE_PATH", db_path)
+
+    # Initially None
+    assert db_handler.get_last_sent_date("daily") is None
+
+    # Insert a dummy newsletter
+    newsletter = {
+        "subject": "GridPulse Test Daily",
+        "content_html": "<p>test</p>",
+        "content_text": "test",
+        "article_count": 0,
+        "edition_number": 1,
+    }
+    db_handler.record_newsletter(newsletter, "daily", [], status='sent')
+
+    last_sent = db_handler.get_last_sent_date("daily")
+    assert last_sent is not None
+    assert "T" in last_sent
+

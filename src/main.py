@@ -112,6 +112,15 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
 
     ioc_csv_content = generate_ioc_csv(filtered_iocs)
     ioc_filename = f"gridpulse_iocs_{edition}_{utc_now().strftime('%Y%m%d')}.csv"
+
+    # Save IOC CSV to disk (bind-mounted data dir) — NOT attached to email
+    # Gmail blocks emails containing threat intel CSVs as security risk (552 5.7.0)
+    if ioc_csv_content:
+        from src.config import DATA_DIR
+        ioc_path = DATA_DIR / ioc_filename
+        ioc_path.write_text(ioc_csv_content, encoding='utf-8')
+        logger.info(f"IOC CSV saved to disk: {ioc_path} ({len(filtered_iocs)} IOCs)")
+
     logger.info(f"Stage 3.5 (IOCs) completed in {time.time() - start_time:.2f}s.")
 
     # --- Stage 4: Deliver ---
@@ -123,7 +132,7 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
         for attempt in range(max_attempts):
             try:
                 recipient_override = [test_recipient] if test_recipient else None
-                send_individual_emails(newsletter, attachment_content=ioc_csv_content, attachment_filename=ioc_filename, recipients_override=recipient_override)
+                send_individual_emails(newsletter, attachment_content=None, attachment_filename=None, recipients_override=recipient_override)
                 # Success! Record in DB
                 selected_articles = newsletter.get('articles', [])
                 record_newsletter(newsletter, edition, selected_articles, status='sent')
@@ -139,4 +148,4 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
         logger.info("Dry run — newsletter not sent. Content logged at DEBUG level.")
         logger.debug(newsletter.get('content_text', ''))
         if ioc_csv_content:
-            logger.debug(f"Generated IOC CSV ({len(all_iocs)} items): {ioc_filename}")
+            logger.debug(f"Generated IOC CSV ({len(all_iocs)} items): {ioc_filename} (saved to disk, not attached)")

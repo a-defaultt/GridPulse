@@ -18,8 +18,21 @@ def run_scheduler():
     # V6: Run on Startup baseline
     logger.info("Performing initial startup run (Edition: daily)...")
     try:
-        run_pipeline(edition='daily')
-        logger.info("Startup run completed successfully.")
+        from src.database.db_handler import get_last_sent_date
+        from src.utils.datetime_utils import str_to_dt, utc_now
+        from datetime import timedelta
+
+        should_run = True
+        last_sent_str = get_last_sent_date('daily')
+        if last_sent_str:
+            last_sent_dt = str_to_dt(last_sent_str)
+            if last_sent_dt and (utc_now() - last_sent_dt < timedelta(hours=18)):
+                logger.info(f"Daily newsletter was already sent recently (at {last_sent_str}). Skipping startup run.")
+                should_run = False
+
+        if should_run:
+            run_pipeline(edition='daily')
+            logger.info("Startup run completed successfully.")
     except Exception as e:
         logger.error(f"Startup run failed: {e}")
 
