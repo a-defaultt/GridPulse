@@ -31,18 +31,22 @@ def generate_ioc_csv(iocs: List[Dict]) -> str:
         "source_article",     # article title
         "source_url",         # article URL
         "extraction_source",  # "full_content" | "summary_fallback"
+        "mallory_tags",       # Mallory.ai enrichment tags (comma-joined)
+        "mallory_context",    # Mallory.ai enrichment context/summary
     ]
 
     FIELD_MAP = {
         "type":              "ioc_type",
         "value":             "ioc_value",
-        "source":            "source",            
+        "source":            "source",
         "confidence":        "confidence",
         "malware_family":    "malware_family",
         "threat_type":       "threat_type",
-        "source_article":    "article_title",     
-        "source_url":        "linked_article",    
+        "source_article":    "article_title",
+        "source_url":        "linked_article",
         "extraction_source": "extraction_source",
+        "mallory_tags":      "mallory_tags",
+        "mallory_context":   "mallory_context",
     }
 
     output = io.StringIO()

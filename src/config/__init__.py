@@ -37,6 +37,14 @@ OOB_WEBHOOK_URL = os.getenv("OOB_WEBHOOK_URL")
 NVD_API_KEY = os.getenv("NVD_API_KEY")
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
 FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
+MALLORY_API_KEY = os.getenv("MALLORY_API_KEY")
+MALLORY_ENRICHMENT_LIMIT = int(os.getenv("MALLORY_ENRICHMENT_LIMIT", 50))
+
+# Google Sheets IOC Sync (service account, headless Docker deployment)
+GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(BASE_DIR / "google-service-account.json"))
+GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+GOOGLE_SHEET_WORKSHEET_NAME = os.getenv("GOOGLE_SHEET_WORKSHEET_NAME", "IOCs")
+GOOGLE_SHEETS_SYNC_ENABLED = os.getenv("GOOGLE_SHEETS_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # LLM Settings
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")

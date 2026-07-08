@@ -29,6 +29,12 @@ numpy>=1.26.0
 # Cryptography
 python-gnupg>=0.5.2
 
+# Mallory.ai threat-intel SDK (IOC feed + enrichment)
+malloryapi>=0.3.0
+
+# Google Sheets sync (service-account write access)
+gspread>=6.1.0
+
 # Charts (uncomment if using chart_generator)
 # matplotlib>=3.9.0
 
