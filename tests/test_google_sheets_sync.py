@@ -51,7 +51,7 @@ def test_push_iocs_no_config(monkeypatch):
         raise AssertionError("gspread should not be touched when config is missing")
 
     monkeypatch.setattr(gss.gspread, "service_account", exploding_service_account)
-    gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}])
+    assert gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}]) is False
 
 
 def test_push_iocs_sync_disabled(monkeypatch):
@@ -61,7 +61,12 @@ def test_push_iocs_sync_disabled(monkeypatch):
         raise AssertionError("gspread should not be touched when sync is disabled")
 
     monkeypatch.setattr(gss.gspread, "service_account", exploding_service_account)
-    gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}])
+    assert gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}]) is False
+
+
+def test_push_iocs_empty_list_is_success(monkeypatch):
+    _configure(monkeypatch, sheet_id=None)
+    assert gss.push_iocs_to_sheet([]) is True
 
 
 def test_push_iocs_dedups_against_existing_rows(monkeypatch):
@@ -79,7 +84,7 @@ def test_push_iocs_dedups_against_existing_rows(monkeypatch):
         {"type": "ip", "value": "1.2.3.4", "source": "AbuseIPDB"},
         {"type": "domain", "value": "evil.com", "source": "Mallory"},
     ]
-    gss.push_iocs_to_sheet(iocs)
+    assert gss.push_iocs_to_sheet(iocs) is True
 
     assert ws.appended_rows is not None
     assert len(ws.appended_rows) == 1
@@ -97,7 +102,7 @@ def test_push_iocs_creates_worksheet_if_missing(monkeypatch):
 
     monkeypatch.setattr(gss.gspread, "service_account", lambda filename: FakeClient())
 
-    gss.push_iocs_to_sheet([{"type": "ip", "value": "9.9.9.9"}])
+    assert gss.push_iocs_to_sheet([{"type": "ip", "value": "9.9.9.9"}]) is True
 
     assert sh.added_worksheet is not None
     assert sh.added_worksheet.appended_header == gss.SHEET_HEADER
@@ -113,4 +118,67 @@ def test_push_iocs_swallows_exceptions(monkeypatch):
     monkeypatch.setattr(gss.gspread, "service_account", raising_service_account)
 
     # Should not raise
-    gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}])
+    assert gss.push_iocs_to_sheet([{"type": "ip", "value": "1.2.3.4"}]) is False
+
+
+def test_sync_iocs_success_clears_pending(monkeypatch, tmp_path):
+    _configure(monkeypatch)
+    monkeypatch.setattr(gss, "PENDING_FILE", tmp_path / "pending.csv")
+    ws = FakeWorksheet()
+    sh = FakeSpreadsheet(worksheet=ws)
+
+    class FakeClient:
+        def open_by_key(self, key):
+            return sh
+
+    monkeypatch.setattr(gss.gspread, "service_account", lambda filename: FakeClient())
+
+    assert gss.sync_iocs([{"type": "ip", "value": "1.2.3.4"}]) is True
+    assert not gss.PENDING_FILE.exists()
+
+
+def test_sync_iocs_failure_writes_pending_file(monkeypatch, tmp_path):
+    _configure(monkeypatch)
+    monkeypatch.setattr(gss, "PENDING_FILE", tmp_path / "pending.csv")
+
+    monkeypatch.setattr(gss.gspread, "service_account", lambda filename: (_ for _ in ()).throw(RuntimeError("down")))
+
+    assert gss.sync_iocs([{"type": "ip", "value": "1.2.3.4", "source": "AbuseIPDB"}]) is False
+    assert gss.PENDING_FILE.exists()
+    content = gss.PENDING_FILE.read_text()
+    assert "1.2.3.4" in content
+
+
+def test_sync_iocs_merges_and_dedupes_pending_on_retry(monkeypatch, tmp_path):
+    _configure(monkeypatch)
+    pending_file = tmp_path / "pending.csv"
+    monkeypatch.setattr(gss, "PENDING_FILE", pending_file)
+
+    # First run: sheet unreachable, IOC gets held locally.
+    monkeypatch.setattr(gss.gspread, "service_account", lambda filename: (_ for _ in ()).throw(RuntimeError("down")))
+    gss.sync_iocs([{"type": "ip", "value": "1.2.3.4", "source": "AbuseIPDB"}])
+    assert pending_file.exists()
+
+    # Second run: sheet reachable again, same IOC resurfaces (e.g. still within
+    # the daily dedup window) plus one genuinely new IOC.
+    ws = FakeWorksheet()
+    sh = FakeSpreadsheet(worksheet=ws)
+
+    class FakeClient:
+        def open_by_key(self, key):
+            return sh
+
+    monkeypatch.setattr(gss.gspread, "service_account", lambda filename: FakeClient())
+
+    result = gss.sync_iocs([
+        {"type": "ip", "value": "1.2.3.4", "source": "AbuseIPDB"},
+        {"type": "domain", "value": "evil.com", "source": "Mallory"},
+    ])
+
+    assert result is True
+    assert not pending_file.exists()
+    # The repeated 1.2.3.4 must appear exactly once, not twice.
+    assert len(ws.appended_rows) == 2
+    values = [row[1] for row in ws.appended_rows]
+    assert values.count("1.2.3.4") == 1
+    assert "evil.com" in values

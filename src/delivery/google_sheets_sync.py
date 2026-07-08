@@ -8,17 +8,30 @@ Never raises: any failure is logged and the pipeline continues, same
 Dedup: only rows whose (type, value) are not already present in the sheet
 (read from columns A+B only, via a single batched range read) are appended,
 since this is a long-lived shared file, not a per-run artifact like the CSV.
+
+Local fallback: the Sheet is now the only durable IOC store — there is no
+more per-run CSV. If a sync attempt fails for any reason (network, auth,
+missing config, or GOOGLE_SHEETS_SYNC_ENABLED=false), sync_iocs() writes the
+IOCs to a single consolidated local file (PENDING_FILE) instead. The next
+run merges that backlog with its own new IOCs, deduping by (type, value)
+before retrying — so a prolonged outage doesn't reappend the same IOCs to
+the pending file run after run, and once the Sheet is reachable again the
+backlog uploads and the local file is deleted.
 """
+import csv
 import logging
+import os
 
 import gspread
 
 from src.config import (
+    DATA_DIR,
     GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_SHEET_ID,
     GOOGLE_SHEET_WORKSHEET_NAME,
     GOOGLE_SHEETS_SYNC_ENABLED,
 )
+from src.utils.csv_utils import generate_ioc_csv
 from src.utils.datetime_utils import dt_to_str, utc_now
 
 logger = logging.getLogger(__name__)
@@ -28,20 +41,47 @@ SHEET_HEADER = [
     "mallory_tags", "mallory_context", "source_article", "source_url", "added_utc",
 ]
 
+PENDING_FILE = DATA_DIR / "gridpulse_iocs_pending_upload.csv"
 
-def push_iocs_to_sheet(iocs: list[dict]) -> None:
+
+def sync_iocs(iocs: list[dict]) -> bool:
+    """
+    Syncs `iocs` to the shared Google Sheet, merged with any IOCs left over
+    from a previously failed sync. On success, clears the local pending
+    file. On failure, persists the (deduped) combined set to PENDING_FILE
+    for the next run to retry. Returns True iff the Sheet is up to date.
+    """
+    pending = _load_pending()
+    combined = _dedupe_by_type_value(pending + iocs)
+    if not combined:
+        return True
+
+    if push_iocs_to_sheet(combined):
+        _clear_pending()
+        return True
+
+    _save_pending(combined)
+    logger.warning(
+        f"[GoogleSheets] Sync unavailable — {len(combined)} IOCs held locally "
+        f"in {PENDING_FILE} for retry on the next run."
+    )
+    return False
+
+
+def push_iocs_to_sheet(iocs: list[dict]) -> bool:
     """
     Appends IOCs not already present in the configured sheet.
-    Best-effort: returns silently on missing config or any exception.
+    Best-effort: returns False (never raises) on missing config or any
+    exception; True on success or if there was nothing to push.
     """
     if not iocs:
-        return
+        return True
     if not GOOGLE_SHEETS_SYNC_ENABLED:
         logger.info("[GoogleSheets] Sync disabled via GOOGLE_SHEETS_SYNC_ENABLED. Skipping.")
-        return
+        return False
     if not GOOGLE_SHEET_ID or not GOOGLE_SERVICE_ACCOUNT_FILE:
         logger.warning("[GoogleSheets] GOOGLE_SHEET_ID or GOOGLE_SERVICE_ACCOUNT_FILE not set. Skipping.")
-        return
+        return False
 
     try:
         gc = gspread.service_account(filename=GOOGLE_SERVICE_ACCOUNT_FILE)
@@ -57,15 +97,55 @@ def push_iocs_to_sheet(iocs: list[dict]) -> None:
 
         if not rows:
             logger.info("[GoogleSheets] No new IOCs to append (all already present).")
-            return
+            return True
 
         ws.append_rows(rows, value_input_option="RAW")
         logger.info(
             f"[GoogleSheets] Appended {len(rows)} new IOC rows "
             f"(skipped {len(iocs) - len(rows)} already-present/duplicate)."
         )
+        return True
     except Exception as e:
         logger.error(f"[GoogleSheets] Sync failed: {e}. Continuing without sheet update.")
+        return False
+
+
+def _dedupe_by_type_value(iocs: list[dict]) -> list[dict]:
+    """Keeps the first occurrence of each (type, value) pair, preserving order."""
+    seen = set()
+    deduped = []
+    for ioc in iocs:
+        typ = ioc.get("type") or ioc.get("ioc_type", "")
+        val = ioc.get("value") or ioc.get("ioc_value", "")
+        key = (typ, val)
+        if not typ or not val or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(ioc)
+    return deduped
+
+
+def _load_pending() -> list[dict]:
+    if not os.path.exists(PENDING_FILE):
+        return []
+    try:
+        with open(PENDING_FILE, newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except Exception as e:
+        logger.warning(f"[GoogleSheets] Failed to read pending file ({e}). Starting fresh.")
+        return []
+
+
+def _save_pending(iocs: list[dict]) -> None:
+    content = generate_ioc_csv(iocs)
+    os.makedirs(os.path.dirname(PENDING_FILE), exist_ok=True)
+    with open(PENDING_FILE, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def _clear_pending() -> None:
+    if os.path.exists(PENDING_FILE):
+        os.remove(PENDING_FILE)
 
 
 def _existing_keys(ws) -> set[tuple[str, str]]:
