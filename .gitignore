@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 venv/
 .env
+google-service-account.json
 
 # Data and Logs
 data/

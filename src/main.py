@@ -25,6 +25,8 @@ from src.aggregator.firecrawl_client import enrich_articles_with_full_content
 from src.aggregator.abuseipdb_client import fetch_recent_iocs as fetch_abuseipdb_iocs
 from src.aggregator.emerging_threats_client import fetch_recent_iocs as fetch_et_iocs
 from src.aggregator.openphish_client import fetch_recent_iocs as fetch_openphish_iocs
+from src.aggregator.mallory_client import fetch_recent_iocs as fetch_mallory_iocs, enrich_iocs
+from src.delivery.google_sheets_sync import push_iocs_to_sheet
 from src.utils.csv_utils import generate_ioc_csv
 from src.utils.datetime_utils import dt_to_str, utc_now
 import time
@@ -87,22 +89,25 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
     article_iocs = get_all_unique_iocs(processed_with_iocs)
 
     # Parallel verified IOC feeds
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         abuseipdb_future = executor.submit(fetch_abuseipdb_iocs)
         et_future = executor.submit(fetch_et_iocs)
         openphish_future = executor.submit(fetch_openphish_iocs)
+        mallory_future = executor.submit(fetch_mallory_iocs)
         abuseipdb_iocs = abuseipdb_future.result()
         et_iocs = et_future.result()
         openphish_iocs = openphish_future.result()
+        mallory_iocs = mallory_future.result()
 
     # Merge all streams
-    all_iocs = abuseipdb_iocs + et_iocs + openphish_iocs + article_iocs
+    all_iocs = abuseipdb_iocs + et_iocs + openphish_iocs + mallory_iocs + article_iocs
 
     logger.info(
         f"IOC streams merged: "
         f"{len(abuseipdb_iocs)} AbuseIPDB + "
         f"{len(et_iocs)} EmergingThreats + "
         f"{len(openphish_iocs)} OpenPhish + "
+        f"{len(mallory_iocs)} Mallory + "
         f"{len(article_iocs)} article-extracted = "
         f"{len(all_iocs)} total"
     )
@@ -110,7 +115,10 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
     from src.processor.ioc_tracker import track_and_filter_iocs
     filtered_iocs = track_and_filter_iocs(all_iocs, edition)
 
-    ioc_csv_content = generate_ioc_csv(filtered_iocs)
+    # Mallory enrichment on the smaller, deduped/filtered set (minimizes API calls)
+    enriched_iocs = enrich_iocs(filtered_iocs)
+
+    ioc_csv_content = generate_ioc_csv(enriched_iocs)
     ioc_filename = f"gridpulse_iocs_{edition}_{utc_now().strftime('%Y%m%d')}.csv"
 
     # Save IOC CSV to disk (bind-mounted data dir) — NOT attached to email
@@ -119,7 +127,10 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
         from src.config import DATA_DIR
         ioc_path = DATA_DIR / ioc_filename
         ioc_path.write_text(ioc_csv_content, encoding='utf-8')
-        logger.info(f"IOC CSV saved to disk: {ioc_path} ({len(filtered_iocs)} IOCs)")
+        logger.info(f"IOC CSV saved to disk: {ioc_path} ({len(enriched_iocs)} IOCs)")
+
+    # Best-effort sync to shared Google Sheet — never blocks the pipeline
+    push_iocs_to_sheet(enriched_iocs)
 
     logger.info(f"Stage 3.5 (IOCs) completed in {time.time() - start_time:.2f}s.")
 
@@ -148,4 +159,4 @@ def run_pipeline(edition: str, dry_run: bool = False, test_recipient: str | None
         logger.info("Dry run — newsletter not sent. Content logged at DEBUG level.")
         logger.debug(newsletter.get('content_text', ''))
         if ioc_csv_content:
-            logger.debug(f"Generated IOC CSV ({len(all_iocs)} items): {ioc_filename} (saved to disk, not attached)")
+            logger.debug(f"Generated IOC CSV ({len(enriched_iocs)} items): {ioc_filename} (saved to disk, not attached)")

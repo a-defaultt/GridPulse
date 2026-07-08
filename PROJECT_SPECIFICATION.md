@@ -18,6 +18,7 @@ GridPulse/
 │   │   ├── abuseipdb_client.py      # AbuseIPDB verified IP blacklist (V5.5, cached)
 │   │   ├── emerging_threats_client.py # Proofpoint compromised IPs/domains (V5.5, cached)
 │   │   ├── openphish_client.py      # OpenPhish active phishing URLs (V5.5, cached)
+│   │   ├── mallory_client.py        # Mallory.ai IOC feed + single-IOC enrichment (V5.7)
 │   │   ├── firecrawl_client.py      # Surgical full-content fetcher (V5.5)
 │   │   └── vendor_advisories.py     # Legacy scrapers (e.g., Adobe fallback)
 │   ├── config/             # Configuration & Source Management
@@ -27,6 +28,7 @@ GridPulse/
 │   │   └── db_handler.py       # Connection management (WAL mode enabled)
 │   ├── delivery/           # Newsletter Distribution
 │   │   ├── email_sender.py     # Looped SMTP delivery with attachment support
+│   │   ├── google_sheets_sync.py # Best-effort IOC sync to a shared Google Sheet (V5.7)
 │   │   └── scheduler.py        # Internal Python-based job scheduler
 │   ├── generator/          # Content Composition
 │   │   ├── __init__.py         # Unified generator orchestrator
@@ -68,11 +70,15 @@ The system polls `sources.yaml`. API sources (NVD/CISA) are handled via dedicate
 *   **Score Filtering:** Ingests `min_score` for community feeds (e.g., Hacker News) to ensure quality.
 *   **Score Filtering:** All community feeds (e.g., Hacker News) respect a configurable `min_score` gate to suppress low-signal articles before they enter the pipeline.
 
-### 3.1b Parallel IOC Feeds (V5.6)
-In addition to RSS/NVD/CISA article sources, the pipeline queries three parallel IOC intelligence feeds that run independently from `sources.yaml`. All three cache their results to `data/` for the calendar day so that running daily + weekly + monthly editions on the same day costs a single network round-trip each:
+### 3.1b Parallel IOC Feeds (V5.7)
+In addition to RSS/NVD/CISA article sources, the pipeline queries four parallel IOC intelligence feeds that run independently from `sources.yaml`. All four cache their results to `data/` for the calendar day so that running daily + weekly + monthly editions on the same day costs a single network round-trip each:
 *   **AbuseIPDB (`abuseipdb_client.py`):** Verified malicious IP blacklist. Requires `ABUSEIPDB_API_KEY`. Filtered by confidence ≥ 90, capped at 500 IPs. Cache: `data/abuseipdb_cache.json`.
 *   **Emerging Threats (`emerging_threats_client.py`):** Proofpoint's compromised IPs + maltrail generic malware domains. No auth required. Capped at 1000 entries per type. Cache: `data/emerging_threats_cache.json`.
 *   **OpenPhish (`openphish_client.py`):** Community feed of verified active phishing URLs. No auth required. Each URL is also decomposed into its base domain. Cache: `data/openphish_cache.json`.
+*   **Mallory.ai (`mallory_client.py`):** Threat-intel observables via the official `malloryapi` SDK. Requires `MALLORY_API_KEY`. Capped at 500 observables. Cache: `data/mallory_cache.json`.
+
+### 3.1d Mallory.ai Enrichment (V5.7)
+After `track_and_filter_iocs` dedupes/time-filters the merged IOC set, up to `MALLORY_ENRICHMENT_LIMIT` (default 50) unique `(type, value)` pairs are enriched via Mallory single-IOC lookups, adding `confidence`, `mallory_tags`, and `mallory_context` fields. Enrichment runs on the smaller, post-filter set to minimize API calls, is deduped in-memory across sources, and decorates IOC dicts for this run's CSV/Sheet output only — it is **not** persisted to the `iocs` SQLite table. Lookup failures (unknown IOC, rate limit, network error) fail open per-IOC and never abort the pipeline.
 
 ### 3.1c Firecrawl Content Enrichment (V5.5)
 After ranking, the top 15 highest-scoring articles are sent to the **Firecrawl API** to fetch their full markdown content. This replaces the truncated RSS `summary` with complete article text, dramatically improving IOC extraction quality.
@@ -141,9 +147,10 @@ In `src/config/__init__.py`, all provided keys are aggregated into a deduplicate
 ### 5.2 Standardized AI Client
 The project exclusively uses the official `openai` Python package for all LLM Chat and Embedding calls by swapping the `base_url` to `https://integrate.api.nvidia.com/v1`. The only exception is the Neural Reranker, which uses `requests` because the reranking endpoint is a custom path and not OpenAI-compatible.
 
-### 5.3 Delivery & Attachments (V5.5)
+### 5.3 Delivery & Attachments (V5.7)
 *   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
-*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **four merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier. Feed results are cached daily so multiple edition runs do not re-fetch the same data.
+*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **five merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, Mallory.ai, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier. Feed results are cached daily so multiple edition runs do not re-fetch the same data.
+*   **Google Sheets Sync:** Enriched IOCs are appended (best-effort, non-blocking) to a shared Google Sheet via a GCP service account (`google_sheets_sync.py`), deduplicated against existing `(type, value)` rows already in the sheet. Controlled by `GOOGLE_SHEET_ID`/`GOOGLE_SERVICE_ACCOUNT_FILE`/`GOOGLE_SHEETS_SYNC_ENABLED`. Failures are logged and never abort the pipeline.
 
 ### 5.4 External API Reference
 All external APIs used by the pipeline and their authentication:
@@ -156,7 +163,9 @@ All external APIs used by the pipeline and their authentication:
 | **AbuseIPDB** | `abuseipdb_client.py` | `ABUSEIPDB_API_KEY` | 1,000 req/day |
 | **Emerging Threats** | `emerging_threats_client.py` | None | Unrestricted |
 | **OpenPhish** | `openphish_client.py` | None | Unrestricted |
+| **Mallory.ai** | `mallory_client.py` | `MALLORY_API_KEY` | See mallory.ai for current tier limits |
 | **Firecrawl** | `firecrawl_client.py` | `FIRECRAWL_API_KEY` | 1,000 credits/month |
+| **Google Sheets** | `google_sheets_sync.py` | `GOOGLE_SERVICE_ACCOUNT_FILE` (service account) | Standard Sheets API quotas |
 
 ## 6. Operational Guidelines
 
