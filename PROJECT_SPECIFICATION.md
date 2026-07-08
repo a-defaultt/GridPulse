@@ -147,10 +147,10 @@ In `src/config/__init__.py`, all provided keys are aggregated into a deduplicate
 ### 5.2 Standardized AI Client
 The project exclusively uses the official `openai` Python package for all LLM Chat and Embedding calls by swapping the `base_url` to `https://integrate.api.nvidia.com/v1`. The only exception is the Neural Reranker, which uses `requests` because the reranking endpoint is a custom path and not OpenAI-compatible.
 
-### 5.3 Delivery & Attachments (V5.7)
+### 5.3 Delivery & IOC Distribution (V5.8)
 *   **Individual SMTP:** Emails are sent one-by-one to the `EMAIL_TO` list to ensure recipient privacy.
-*   **IOC CSV Attachments:** Every newsletter includes a generated `.csv` attachment containing IOCs from **five merged streams**: AbuseIPDB, Emerging Threats, OpenPhish, Mallory.ai, and article-extracted IOCs. The `source` column distinguishes origin so analysts can filter by tier. Feed results are cached daily so multiple edition runs do not re-fetch the same data.
-*   **Google Sheets Sync:** Enriched IOCs are appended (best-effort, non-blocking) to a shared Google Sheet via a GCP service account (`google_sheets_sync.py`), deduplicated against existing `(type, value)` rows already in the sheet. Controlled by `GOOGLE_SHEET_ID`/`GOOGLE_SERVICE_ACCOUNT_FILE`/`GOOGLE_SHEETS_SYNC_ENABLED`. Failures are logged and never abort the pipeline.
+*   **Google Sheets as the IOC Store (V5.8):** IOCs are no longer emailed or written to disk on every run — `sync_iocs()` (`google_sheets_sync.py`) appends them to a shared Google Sheet via a GCP service account, deduplicated against existing `(type, value)` rows already in the sheet. Merged from **five streams**: AbuseIPDB, Emerging Threats, OpenPhish, Mallory.ai, and article-extracted IOCs; the `source` column distinguishes origin. Controlled by `GOOGLE_SHEET_ID`/`GOOGLE_SERVICE_ACCOUNT_FILE`/`GOOGLE_SHEETS_SYNC_ENABLED`.
+*   **Local Fallback on Sync Failure:** If a Sheets push fails for any reason (network, auth, missing config), the `(type, value)`-deduped IOC set is written to a single consolidated `data/gridpulse_iocs_pending_upload.csv` instead of being lost. The next run merges that backlog with its own new IOCs, deduping again before retrying, and deletes the file once the Sheet is reachable — this is the *only* local IOC artifact; there is no more per-run CSV.
 
 ### 5.4 External API Reference
 All external APIs used by the pipeline and their authentication:
