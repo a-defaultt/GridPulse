@@ -27,6 +27,17 @@
         {% block content %}{% endblock %}
     </div>
 
+    {% if google_sheet_url %}
+    <div style="margin: 25px 0; text-align: center;">
+        <a href="{{ google_sheet_url }}" target="_blank" style="background-color: #1a237e; color: #ffffff; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">
+            View Live IOC Feed (Google Sheet)
+        </a>
+        <p style="font-size: 0.8em; color: #777; margin-top: 8px;">
+            All indicators of compromise from this and previous editions, updated on every run.
+        </p>
+    </div>
+    {% endif %}
+
     <div class="footer">
         <p>&copy; 2026 GridPulse. All rights reserved.</p>
         <p>This is an automated cybersecurity intelligence report.</p>
