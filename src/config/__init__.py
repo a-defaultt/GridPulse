@@ -44,6 +44,8 @@ MALLORY_ENRICHMENT_LIMIT = int(os.getenv("MALLORY_ENRICHMENT_LIMIT", 50))
 GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(BASE_DIR / "google-service-account.json"))
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_WORKSHEET_NAME = os.getenv("GOOGLE_SHEET_WORKSHEET_NAME", "IOCs")
+# Human-facing link to the shared IOC sheet, used in newsletter emails
+GOOGLE_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/edit" if GOOGLE_SHEET_ID else ""
 GOOGLE_SHEETS_SYNC_ENABLED = os.getenv("GOOGLE_SHEETS_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # LLM Settings

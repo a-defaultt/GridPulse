@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from src.config import TIMEZONE
+from src.config import TIMEZONE, GOOGLE_SHEET_URL
 from src.utils.datetime_utils import format_for_email, utc_now
 
 logger = logging.getLogger(__name__)
@@ -25,12 +25,15 @@ def generate_daily_newsletter(articles: list[dict], edition_number: int) -> dict
             articles=articles,
             date_display=date_display,
             edition_number=edition_number,
-            edition_title="Daily"
+            edition_title="Daily",
+            google_sheet_url=GOOGLE_SHEET_URL
         )
         
         # Simple text fallback (very basic)
         text_content = f"GridPulse Daily Newsletter - Edition {edition_number}\n"
         text_content += f"{date_display}\n\n"
+        if GOOGLE_SHEET_URL:
+            text_content += f"Live IOC feed (Google Sheet): {GOOGLE_SHEET_URL}\n\n"
         for a in articles:
             text_content += f"- {a['title']}\n  {a.get('llm_summary', a['summary'])}\n  {a['url']}\n\n"
             
