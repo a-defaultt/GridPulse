@@ -18,7 +18,8 @@ GridPulse is a self-hosted, out-of-band (OOB) threat intelligence aggregation an
 - **Adversarial Ingestion Shield:** Implements a strict sanitization layer (`src/utils/sanitizer.py`) that isolates untrusted data in delimited blocks and enforces system-level execution constraints to prevent prompt injection.
 - **Cryptographic Payload Integrity:** Natively integrates PGP/GPG signing for every HTML report, providing mathematical proof of origin and protection against transit tampering.
 - **OOB Failover Resiliency:** Features an automated pivot mechanism; if primary SMTP SSL dispatch fails or times out, the engine immediately pushes high-severity alerts to secure Webhooks (Slack/Teams/Discord).
-- **Live Google Sheet IOC Feed:** Every merged, enriched IOC is appended to a shared Google Sheet via a GCP service account — deduplicated against everything already there — so analysts get a continuously updated, queryable feed instead of a one-off email attachment (which also sidesteps SMTP gateway scanners like Gmail `552 5.7.0` that block raw threat signature lists in transit).
+- **Live Google Sheet IOC Feed:** Every merged, enriched IOC is appended to a shared Google Sheet via a GCP service account — deduplicated against everything already there — so analysts get a continuously updated, queryable feed instead of a one-off email attachment (which also sidesteps SMTP gateway scanners like Gmail `552 5.7.0` that block raw threat signature lists in transit). Every newsletter (daily/weekly/monthly) links directly to the live sheet via a styled button and a plain-text fallback link.
+- **Downstream SOC Consumption:** The same sheet is read (read-only) by [Sentinel](https://github.com/a-defaultt/Sentinel), which cross-references live SIEM alerts against it and escalates matches automatically — GridPulse's intelligence directly drives SOC detection and response, not just analyst review.
 - **Self-Healing Sync Fallback:** If the Sheet is unreachable, IOCs are held in a single local file and automatically merged, deduplicated, and retried on the next run — no data is lost during a Sheets outage, and nothing accumulates once it recovers.
 - **Startup Scheduler Guard:** Uses a database-backed 18-hour guard check during container start/restart sequences, checking if a briefing was already dispatched recently to prevent duplicate newsletter delivery.
 
@@ -92,7 +93,7 @@ To meet tight enterprise security and efficiency footprints, GridPulse completel
 
 1. **Clone the Infrastructure Repo:**
    ```bash
-   git clone https://github.com/your-username/GridPulse
+   git clone https://github.com/a-defaultt/GridPulse
    cd GridPulse
    ```
 
